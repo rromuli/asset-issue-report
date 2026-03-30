@@ -424,7 +424,6 @@ export default function AdminDashboard({ session, adminRole }) {
                   { value: "Low", label: "Low" },
                   { value: "Medium", label: "Medium" },
                   { value: "High", label: "High" },
-                  { value: "Critical", label: "Critical" },
                 ]}
               />
               <FilterSelect
@@ -596,7 +595,6 @@ export default function AdminDashboard({ session, adminRole }) {
                 <DetailGroup
                   items={[
                     ["Department", selectedReport.department],
-                    ["Preferred contact", selectedReport.preferred_contact],
                     ["Asset type", selectedReport.asset_type],
                     ["Serial number", selectedReport.serial_number],
                     ["Asset tag", selectedReport.asset_tag],
@@ -611,7 +609,6 @@ export default function AdminDashboard({ session, adminRole }) {
                 />
 
                 <TextPanel title="Description" text={selectedReport.description} />
-                <TextPanel title="Steps taken" text={selectedReport.steps_taken} />
                 <TextPanel
                   title="Technical assessment"
                   text={

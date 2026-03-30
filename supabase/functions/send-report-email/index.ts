@@ -11,13 +11,11 @@ serve(async (req) => {
 
     const {
       full_name,
-      employee_id,
       department,
       asset_type,
       issue_category,
       severity,
       description,
-      preferred_contact,
     } = body;
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -67,11 +65,6 @@ serve(async (req) => {
                     </div>
 
                     <div style="background:#f9fafb;border-radius:18px;padding:16px;">
-                      <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717a;">Employee ID</div>
-                      <div style="margin-top:8px;font-size:15px;font-weight:600;color:#111827;">${employee_id}</div>
-                    </div>
-
-                    <div style="background:#f9fafb;border-radius:18px;padding:16px;">
                       <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717a;">Department</div>
                       <div style="margin-top:8px;font-size:15px;font-weight:600;color:#111827;">${department}</div>
                     </div>
@@ -90,11 +83,6 @@ serve(async (req) => {
                       <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717a;">Severity</div>
                       <div style="margin-top:8px;font-size:15px;font-weight:600;color:#111827;">${severity}</div>
                     </div>
-                  </div>
-
-                  <div style="margin-top:16px;background:#f9fafb;border-radius:18px;padding:16px;">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#71717a;">Preferred Contact</div>
-                    <div style="margin-top:8px;font-size:15px;font-weight:600;color:#111827;">${preferred_contact}</div>
                   </div>
 
                   <div style="margin-top:16px;background:#ffffff;border:1px solid #e4e4e7;border-radius:18px;padding:18px;">

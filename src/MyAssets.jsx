@@ -36,7 +36,7 @@ const previewAssets = [
   },
 ];
 
-export default function MyAssets({ session }) {
+export default function MyAssets({ session, onReportIssue }) {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(!!session);
   const [showForm, setShowForm] = useState(false);
@@ -174,33 +174,32 @@ export default function MyAssets({ session }) {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-[32px] border border-zinc-200/80 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] p-3 sm:p-4">
+      <div className="mx-auto max-w-6xl space-y-3">
+        <section className="rounded-[24px] border border-zinc-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
                 Employee Asset Portal
               </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-5xl">
+              <h1 className="mt-1.5 text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">
                 My Assets
               </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
-                View assets registered under your name, document their current condition,
-                and prepare for support or replacement workflows.
+              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-zinc-600">
+                View assigned devices, update condition details, and jump into issue reporting.
               </p>
             </div>
 
             <button
               onClick={() => setShowForm((v) => !v)}
-              className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700"
+              className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700"
             >
               {showForm ? "Close form" : "Add Asset"}
             </button>
           </div>
 
           {!session ? (
-            <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-800">
+            <div className="mt-3 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm leading-5 text-amber-800">
               Preview mode is active right now. Google / OIDC login and real asset saving
               will be connected next.
             </div>
@@ -208,19 +207,19 @@ export default function MyAssets({ session }) {
         </section>
 
         {showForm ? (
-          <section className="rounded-[32px] border border-zinc-200/80 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-8">
-            <h2 className="text-xl font-bold text-zinc-900">Register New Asset</h2>
-            <p className="mt-2 text-sm leading-7 text-zinc-600">
+          <section className="rounded-[24px] border border-zinc-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-5">
+            <h2 className="text-lg font-bold text-zinc-900">Register New Asset</h2>
+            <p className="mt-1 text-sm leading-5 text-zinc-600">
               Add the asset currently assigned to you, including a photo of its condition.
             </p>
 
             {error ? (
-              <div className="mt-5 rounded-[24px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+              <div className="mt-3 rounded-[18px] border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
                 {error}
               </div>
             ) : null}
 
-            <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+            <form onSubmit={handleSubmit} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Asset name" required>
                 <Input
                   value={form.assetName}
@@ -233,7 +232,7 @@ export default function MyAssets({ session }) {
                 <select
                   value={form.assetType}
                   onChange={(e) => updateField("assetType", e.target.value)}
-                  className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                  className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   required
                 >
                   <option value="">Select asset type</option>
@@ -281,11 +280,11 @@ export default function MyAssets({ session }) {
               <div className="md:col-span-2">
                 <Field label="Condition notes">
                   <textarea
-                    rows={5}
+                    rows={3}
                     value={form.conditionNotes}
                     onChange={(e) => updateField("conditionNotes", e.target.value)}
                     placeholder="Describe the asset's current physical condition, visible damage, or anything IT should know."
-                    className="w-full rounded-[24px] border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                    className="w-full rounded-[18px] border border-zinc-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </Field>
               </div>
@@ -294,7 +293,7 @@ export default function MyAssets({ session }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 disabled:opacity-60"
+                  className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 disabled:opacity-60"
                 >
                   {submitting ? "Saving asset..." : session ? "Save Asset" : "Preview Only"}
                 </button>
@@ -302,7 +301,7 @@ export default function MyAssets({ session }) {
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
                 >
                   Cancel
                 </button>
@@ -311,28 +310,35 @@ export default function MyAssets({ session }) {
           </section>
         ) : null}
 
-        <section className="rounded-[32px] border border-zinc-200/80 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-8">
-          <h2 className="text-xl font-bold text-zinc-900">Registered Assets</h2>
-          <p className="mt-2 text-sm leading-7 text-zinc-600">
-            Assets currently registered under your account.
-          </p>
+        <section className="rounded-[24px] border border-zinc-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-5">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900">Registered Assets</h2>
+              <p className="mt-1 text-sm leading-5 text-zinc-600">
+                Assets currently registered under your account.
+              </p>
+            </div>
+            <div className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
+              {loading ? "Loading" : `${assets.length} item${assets.length === 1 ? "" : "s"}`}
+            </div>
+          </div>
 
           {loading ? (
             <div className="mt-6 text-sm text-zinc-500">Loading assets...</div>
           ) : assets.length === 0 ? (
-            <div className="mt-6 rounded-[24px] bg-zinc-50 p-6 text-sm text-zinc-600">
+            <div className="mt-4 rounded-[18px] bg-zinc-50 p-4 text-sm text-zinc-600">
               No assets registered yet. Click <strong>Add Asset</strong> to create your first record.
             </div>
           ) : (
-            <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {assets.map((asset) => (
                 <div
                   key={asset.id}
-                  className="rounded-[28px] border border-zinc-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(0,0,0,0.05)]"
+                  className="rounded-[20px] border border-zinc-200/80 bg-zinc-50/70 p-3.5 shadow-[0_4px_14px_rgba(0,0,0,0.04)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-lg font-semibold text-zinc-900">{asset.asset_name}</p>
+                      <p className="text-sm font-semibold text-zinc-900">{asset.asset_name}</p>
                       <p className="mt-1 text-sm text-zinc-500">{asset.asset_type}</p>
                     </div>
                     <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
@@ -340,7 +346,7 @@ export default function MyAssets({ session }) {
                     </span>
                   </div>
 
-                  <div className="mt-5 space-y-3 text-sm">
+                  <div className="mt-3 space-y-2 text-sm">
                     <AssetRow label="Make / Model" value={asset.make_model} />
                     <AssetRow label="Serial Number" value={asset.serial_number} />
                     <AssetRow label="Asset Tag" value={asset.asset_tag} />
@@ -354,27 +360,28 @@ export default function MyAssets({ session }) {
                     />
                   </div>
 
-                  <div className="mt-5 rounded-[20px] bg-zinc-50 p-4">
+                  <div className="mt-3 rounded-[16px] bg-white p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
                       Condition Notes
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-zinc-700">
+                    <p className="mt-1.5 text-sm leading-5 text-zinc-700">
                       {asset.condition_notes || "No condition notes added."}
                     </p>
                   </div>
 
-                  <div className="mt-5 flex gap-3">
+                  <div className="mt-3 flex gap-2">
                     {asset.condition_photo_path && session ? (
                       <button
                         onClick={() => openPhoto(asset.condition_photo_path)}
-                        className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
+                        className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
                       >
                         View Photo
                       </button>
                     ) : null}
 
                     <button
-                      className="rounded-2xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
+                      onClick={() => onReportIssue?.(asset)}
+                      className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
                     >
                       Report Issue
                     </button>
@@ -406,7 +413,7 @@ function Input({ value, onChange, placeholder }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+      className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
     />
   );
 }

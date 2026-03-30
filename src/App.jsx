@@ -7,11 +7,12 @@ import { supabase } from "./supabaseClient";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("assets");
-  const [showLogin, setShowLogin] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [session, setSession] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminRole, setAdminRole] = useState(null);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [selectedAsset, setSelectedAsset] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -73,19 +74,19 @@ export default function App() {
 
   function openAssetsTab() {
     setActiveTab("assets");
-    setShowLogin(false);
+    setShowAdminLogin(false);
     window.history.replaceState({}, "", "/");
   }
 
   function openIssuesTab() {
     setActiveTab("issues");
-    setShowLogin(false);
+    setShowAdminLogin(false);
     window.history.replaceState({}, "", "/?view=issues");
   }
 
   function openAdminTab() {
     if (!session) {
-      setShowLogin(true);
+      setShowAdminLogin(true);
       return;
     }
 
@@ -103,34 +104,28 @@ export default function App() {
     setActiveTab("assets");
     setIsAdmin(false);
     setAdminRole(null);
-    setShowLogin(false);
+    setSelectedAsset(null);
+    setShowAdminLogin(false);
     window.history.replaceState({}, "", "/");
+  }
+
+  function handleReportIssueFromAsset(asset) {
+    setSelectedAsset(asset);
+    setActiveTab("issues");
+    setShowAdminLogin(false);
+    window.history.replaceState({}, "", "/?view=issues");
   }
 
   function renderMainContent() {
     if (activeTab === "assets") {
-      return <MyAssets session={session} />;
+      return <MyAssets session={session} onReportIssue={handleReportIssueFromAsset} />;
     }
 
     if (activeTab === "issues") {
-      return <AssetIssueReportForm />;
+      return <AssetIssueReportForm selectedAsset={selectedAsset} />;
     }
 
     if (activeTab === "admin") {
-      if (!session) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-amber-200 bg-amber-50 px-6 py-6 text-amber-900 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              <h2 className="text-lg font-semibold">Admin authentication required</h2>
-              <p className="mt-2 text-sm leading-7 text-amber-800">
-                Please sign in with an approved administrator account to access the
-                dashboard.
-              </p>
-            </div>
-          </div>
-        );
-      }
-
       if (checkingAdmin) {
         return (
           <div className="px-4 py-10 sm:px-6 lg:px-8">
@@ -158,29 +153,23 @@ export default function App() {
       return <AdminDashboard session={session} adminRole={adminRole} />;
     }
 
-    return <MyAssets session={session} />;
+    return <MyAssets session={session} onReportIssue={handleReportIssueFromAsset} />;
   }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] text-zinc-900">
-      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-zinc-950 text-lg font-bold tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
+      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/85 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-gradient-to-br from-zinc-950 to-zinc-700 text-base font-bold tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
                 GJ
               </div>
 
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                  GJIRAFA • Internal IT Operations
-                </p>
-                <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-                  Asset Lifecycle Portal
+                <h1 className="text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
+                  Gjirafa Internal IT Operations
                 </h1>
-                <p className="mt-1 text-sm leading-7 text-zinc-600 sm:text-base">
-                  Employee asset registration, issue reporting, and approval workflow.
-                </p>
               </div>
             </div>
 
@@ -208,7 +197,7 @@ export default function App() {
                   Issue Reports
                 </button>
 
-                {isAdmin ? (
+                {session && isAdmin ? (
                   <button
                     onClick={openAdminTab}
                     className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
@@ -245,11 +234,7 @@ export default function App() {
                       Logout
                     </button>
                   </>
-                ) : (
-                  <div className="hidden rounded-[20px] border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
-                    Authentication will be connected later
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -258,11 +243,11 @@ export default function App() {
 
       <main>{renderMainContent()}</main>
 
-      {showLogin ? (
+      {showAdminLogin ? (
         <AdminLogin
-          onClose={() => setShowLogin(false)}
+          onClose={() => setShowAdminLogin(false)}
           onSuccess={() => {
-            setShowLogin(false);
+            setShowAdminLogin(false);
             setActiveTab("admin");
             window.history.replaceState({}, "", "/?view=admin");
           }}

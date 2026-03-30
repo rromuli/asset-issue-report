@@ -38,10 +38,12 @@ const previewAssets = [
 
 export default function MyAssets({ session, onReportIssue }) {
   const [assets, setAssets] = useState([]);
+  const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
   const [loading, setLoading] = useState(!!session);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
     assetName: "",
     assetType: "",
@@ -57,6 +59,7 @@ export default function MyAssets({ session, onReportIssue }) {
       fetchAssets();
     } else {
       setAssets(previewAssets);
+      setPhotoPreviewUrls({});
       setLoading(false);
     }
   }, [session]);
@@ -67,7 +70,9 @@ export default function MyAssets({ session, onReportIssue }) {
 
     const { data, error } = await supabase
       .from("employee_assets")
-      .select("*")
+      .select(
+        "id, asset_name, asset_type, serial_number, asset_tag, make_model, assigned_at, condition_notes, condition_photo_path"
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -76,19 +81,58 @@ export default function MyAssets({ session, onReportIssue }) {
       return;
     }
 
-    setAssets(data || []);
+    const nextAssets = data || [];
+    setAssets(nextAssets);
+    await loadPhotoPreviews(nextAssets);
     setLoading(false);
+  }
+
+  async function loadPhotoPreviews(assetRows) {
+    if (!session) {
+      setPhotoPreviewUrls({});
+      return;
+    }
+
+    const rowsWithPhotos = assetRows.filter((row) => row.condition_photo_path);
+
+    if (rowsWithPhotos.length === 0) {
+      setPhotoPreviewUrls({});
+      return;
+    }
+
+    const urlEntries = await Promise.all(
+      rowsWithPhotos.map(async (row) => {
+        const { data, error } = await supabase.storage
+          .from("asset-photos")
+          .createSignedUrl(row.condition_photo_path, 3600);
+
+        if (error || !data?.signedUrl) {
+          return [row.id, null];
+        }
+
+        return [row.id, data.signedUrl];
+      })
+    );
+
+    setPhotoPreviewUrls(Object.fromEntries(urlEntries.filter(([, url]) => !!url)));
   }
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
+  function showToast(message, tone = "info") {
+    setToast({ message, tone });
+    window.setTimeout(() => {
+      setToast((current) => (current?.message === message ? null : current));
+    }, 2600);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
 
     if (!session) {
-      alert("Authentication will be connected later. For now this page is in preview mode.");
+      showToast("Preview mode is active. Sign in to save real assets.", "info");
       return;
     }
 
@@ -164,7 +208,7 @@ export default function MyAssets({ session, onReportIssue }) {
       .createSignedUrl(path, 60);
 
     if (error) {
-      alert(error.message);
+      showToast(error.message, "error");
       return;
     }
 
@@ -324,7 +368,14 @@ export default function MyAssets({ session, onReportIssue }) {
           </div>
 
           {loading ? (
-            <div className="mt-6 text-sm text-zinc-500">Loading assets...</div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="h-52 animate-pulse rounded-[20px] border border-zinc-200/80 bg-zinc-100/60"
+                />
+              ))}
+            </div>
           ) : assets.length === 0 ? (
             <div className="mt-4 rounded-[18px] bg-zinc-50 p-4 text-sm text-zinc-600">
               No assets registered yet. Click <strong>Add Asset</strong> to create your first record.
@@ -336,6 +387,25 @@ export default function MyAssets({ session, onReportIssue }) {
                   key={asset.id}
                   className="rounded-[20px] border border-zinc-200/80 bg-zinc-50/70 p-3.5 shadow-[0_4px_14px_rgba(0,0,0,0.04)]"
                 >
+                  {photoPreviewUrls[asset.id] ? (
+                    <button
+                      type="button"
+                      onClick={() => openPhoto(asset.condition_photo_path)}
+                      className="group mb-3 block w-full overflow-hidden rounded-[16px] border border-zinc-200 bg-zinc-100"
+                    >
+                      <img
+                        src={photoPreviewUrls[asset.id]}
+                        alt={`${asset.asset_name} condition`}
+                        className="h-36 w-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                        loading="lazy"
+                      />
+                    </button>
+                  ) : (
+                    <div className="mb-3 flex h-20 items-center justify-center rounded-[16px] border border-dashed border-zinc-300 bg-zinc-100/70 text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">
+                      No photo
+                    </div>
+                  )}
+
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900">{asset.asset_name}</p>
@@ -391,6 +461,7 @@ export default function MyAssets({ session, onReportIssue }) {
             </div>
           )}
         </section>
+        {toast ? <InlineToast tone={toast.tone} message={toast.message} /> : null}
       </div>
     </div>
   );
@@ -423,6 +494,23 @@ function AssetRow({ label, value }) {
     <div className="flex items-start justify-between gap-4">
       <span className="text-zinc-500">{label}</span>
       <span className="text-right font-medium text-zinc-900">{value || "-"}</span>
+    </div>
+  );
+}
+
+function InlineToast({ tone = "info", message }) {
+  const toneMap = {
+    info: "border-blue-200 bg-blue-50 text-blue-800",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warning: "border-amber-200 bg-amber-50 text-amber-800",
+    error: "border-red-200 bg-red-50 text-red-800",
+  };
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 max-w-sm">
+      <div className={`rounded-2xl border px-4 py-3 text-sm shadow-lg ${toneMap[tone]}`}>
+        {message}
+      </div>
     </div>
   );
 }

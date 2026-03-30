@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "./supabaseClient";
+import amsGjirafaLogo from "./assets/ams-gjirafa-logo.svg";
 
 export default function AdminLogin({ onClose, onSuccess }) {
   const [email, setEmail] = useState("");
@@ -28,10 +29,16 @@ export default function AdminLogin({ onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[28px] border border-zinc-200 bg-white p-6 shadow-2xl sm:p-7">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 backdrop-blur-md">
+      <div className="w-full max-w-md rounded-[30px] border border-zinc-200/90 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] ring-1 ring-white sm:p-7">
+        <img
+          src={amsGjirafaLogo}
+          alt="AMS GJIRAFA"
+          className="h-10 w-auto object-contain"
+        />
+
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="mt-5">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">
               Administrator Login
             </p>
@@ -42,7 +49,7 @@ export default function AdminLogin({ onClose, onSuccess }) {
 
           <button
             onClick={onClose}
-            className="rounded-xl border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50"
+            className="rounded-xl border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 transition hover:border-zinc-400 hover:bg-zinc-50"
           >
             Close
           </button>
@@ -57,7 +64,7 @@ export default function AdminLogin({ onClose, onSuccess }) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              className="w-full rounded-2xl border border-zinc-300 bg-zinc-50/40 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               placeholder="admin@company.com"
               required
             />
@@ -71,7 +78,7 @@ export default function AdminLogin({ onClose, onSuccess }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              className="w-full rounded-2xl border border-zinc-300 bg-zinc-50/40 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               placeholder="Enter password"
               required
             />
@@ -87,13 +94,13 @@ export default function AdminLogin({ onClose, onSuccess }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-blue-600 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+            className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)] transition hover:from-blue-700 hover:to-blue-800 disabled:cursor-not-allowed disabled:from-blue-400 disabled:to-blue-400"
           >
             {loading ? "Signing in..." : "Open Admin Dashboard"}
           </button>
         </form>
 
-        <div className="mt-5 rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-600">
+        <div className="mt-5 rounded-2xl border border-zinc-200/80 bg-zinc-50 px-4 py-3 text-xs text-zinc-600">
           Restricted to approved internal administrators.
         </div>
       </div>

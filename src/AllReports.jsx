@@ -36,7 +36,9 @@ export default function AllReports() {
 
     const { data, error } = await supabase
       .from("asset_issue_reports")
-      .select("*")
+      .select(
+        "id, full_name, department, asset_type, issue_category, severity, status, approval_status, created_at"
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -67,8 +69,9 @@ export default function AllReports() {
   if (loading) {
     return (
       <div className="px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl rounded-[24px] border border-zinc-200/80 bg-white px-6 py-5 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-          Loading all reports...
+        <div className="mx-auto max-w-7xl space-y-4">
+          <div className="h-20 animate-pulse rounded-[24px] border border-zinc-200/80 bg-white" />
+          <div className="h-[420px] animate-pulse rounded-[24px] border border-zinc-200/80 bg-white" />
         </div>
       </div>
     );

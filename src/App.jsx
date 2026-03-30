@@ -5,6 +5,7 @@ import AdminDashboard from "./AdminDashboard";
 import AdminLogin from "./AdminLogin";
 import AllReports from "./AllReports";
 import EmployeeLogin from "./EmployeeLogin";
+import gjirafaLogo from "./assets/gjirafa-logo.svg";
 import { supabase } from "./supabaseClient";
 
 const FALLBACK_ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "rron.s@gjirafa.com")
@@ -159,7 +160,7 @@ export default function App() {
     }
 
     if (activeTab === "issues") {
-      return <AssetIssueReportForm selectedAsset={selectedAsset} />;
+      return <AssetIssueReportForm selectedAsset={selectedAsset} session={session} />;
     }
 
     if (activeTab === "all_reports") {
@@ -222,31 +223,36 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] text-zinc-900">
-      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-gradient-to-br from-zinc-950 to-zinc-700 text-base font-bold tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
-                GJ
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.11),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_25%),linear-gradient(to_bottom,#f9fafb,#f4f6fb)] text-zinc-900">
+      {session ? (
+        <header className="sticky top-0 z-40 border-b border-white/60 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.04)] backdrop-blur-2xl">
+          <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <img
+                  src={gjirafaLogo}
+                  alt="Gjirafa"
+                  className="h-14 w-auto shrink-0 object-contain sm:h-16 md:h-20"
+                />
+
+                <div>
+                  <h1 className="text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
+                    Internal IT Operations
+                  </h1>
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
+                    Asset Managmet System
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <h1 className="text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
-                  Gjirafa Internal IT Operations
-                </h1>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {session ? (
-                <div className="inline-flex rounded-[20px] border border-zinc-200/80 bg-white/70 p-1 shadow-[0_8px_20px_rgba(0,0,0,0.05)]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="inline-flex rounded-[18px] border border-zinc-200/90 bg-zinc-100/70 p-1 shadow-[0_10px_24px_rgba(0,0,0,0.06)]">
                   <button
                     onClick={openAssetsTab}
                     className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
                       activeTab === "assets"
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-zinc-700 hover:bg-white"
+                        ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                        : "text-zinc-700 hover:bg-white/80"
                     }`}
                   >
                     My Assets
@@ -256,8 +262,8 @@ export default function App() {
                     onClick={openIssuesTab}
                     className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
                       activeTab === "issues"
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-zinc-700 hover:bg-white"
+                        ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                        : "text-zinc-700 hover:bg-white/80"
                     }`}
                   >
                     Issue Reports
@@ -268,8 +274,8 @@ export default function App() {
                       onClick={openAllReportsTab}
                       className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
                         activeTab === "all_reports"
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "text-zinc-700 hover:bg-white"
+                          ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                          : "text-zinc-700 hover:bg-white/80"
                       }`}
                     >
                       All Reports
@@ -281,45 +287,42 @@ export default function App() {
                       onClick={openAdminTab}
                       className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
                         activeTab === "admin"
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "text-zinc-700 hover:bg-white"
+                          ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                          : "text-zinc-700 hover:bg-white/80"
                       }`}
                     >
                       Admin Dashboard
                     </button>
                   ) : null}
                 </div>
-              ) : null}
 
-              <div className="flex items-center gap-3">
-                {session ? (
-                  <>
-                    <div className="hidden rounded-[20px] border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
-                      Signed in as{" "}
-                      <span className="font-medium text-zinc-900">
-                        {session.user.email}
-                      </span>
-                      {adminRole ? (
-                        <>
-                          {" "}
-                          - <span className="uppercase">{adminRole}</span>
-                        </>
-                      ) : null}
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="hidden rounded-[16px] border border-zinc-200/80 bg-white/90 px-4 py-2.5 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" />{" "}
+                    Signed in as{" "}
+                    <span className="font-medium text-zinc-900">
+                      {session.user.email}
+                    </span>
+                    {adminRole ? (
+                      <>
+                        {" "}
+                        - <span className="uppercase">{adminRole}</span>
+                      </>
+                    ) : null}
+                  </div>
 
-                    <button
-                      onClick={handleLogout}
-                      className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
-                    >
-                      Logout
-                    </button>
-                  </>
-                ) : null}
+                  <button
+                    onClick={handleLogout}
+                    className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-zinc-50"
+                  >
+                    Logout
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+      ) : null}
 
       <main>{renderMainContent()}</main>
 

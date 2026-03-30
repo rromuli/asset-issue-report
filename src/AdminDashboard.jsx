@@ -25,6 +25,7 @@ const APPROVAL_STYLES = {
 
 export default function AdminDashboard({ session, adminRole, progressOnly = false }) {
   const [reports, setReports] = useState([]);
+  const [attachmentCounts, setAttachmentCounts] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,11 +33,14 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
   const [statusFilter, setStatusFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [approvalFilter, setApprovalFilter] = useState("all");
+  const [quickFilter, setQuickFilter] = useState("all");
   const [updatingId, setUpdatingId] = useState(null);
   const [technicalAssessmentDraft, setTechnicalAssessmentDraft] = useState("");
   const [repairabilityDraft, setRepairabilityDraft] = useState("unknown");
   const [approverNotesDraft, setApproverNotesDraft] = useState("");
+  const [procurementQuery, setProcurementQuery] = useState("");
   const [confirmAction, setConfirmAction] = useState(null);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     fetchReports();
@@ -46,16 +50,25 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     setTechnicalAssessmentDraft(selectedReport?.technical_assessment || "");
     setRepairabilityDraft(selectedReport?.repairability_status || "unknown");
     setApproverNotesDraft(selectedReport?.approver_notes || "");
+    setProcurementQuery(
+      [selectedReport?.make_model, selectedReport?.asset_type].filter(Boolean).join(" ")
+    );
   }, [selectedReport]);
 
   async function fetchReports() {
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase
-      .from("asset_issue_reports")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [{ data, error }, { data: attachmentRows, error: attachmentError }] =
+      await Promise.all([
+        supabase
+          .from("asset_issue_reports")
+          .select(
+            "id, full_name, employee_id, department, asset_type, serial_number, asset_tag, make_model, operating_system, issue_category, severity, description, status, approval_status, technical_assessment, approver_notes, repairability_status, replacement_required, sent_for_approval_at, approved_at, approved_by, created_at"
+          )
+          .order("created_at", { ascending: false }),
+        supabase.from("asset_issue_attachments").select("report_id"),
+      ]);
 
     if (error) {
       setError(error.message);
@@ -64,7 +77,21 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     }
 
     setReports(data || []);
+    if (!attachmentError && attachmentRows) {
+      const counts = attachmentRows.reduce((acc, row) => {
+        acc[row.report_id] = (acc[row.report_id] || 0) + 1;
+        return acc;
+      }, {});
+      setAttachmentCounts(counts);
+    }
     setLoading(false);
+  }
+
+  function showToast(message, tone = "info") {
+    setToast({ message, tone });
+    window.setTimeout(() => {
+      setToast((current) => (current?.message === message ? null : current));
+    }, 2600);
   }
 
   function syncUpdatedReport(updatedFields, reportId) {
@@ -90,12 +117,13 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
       .eq("id", reportId);
 
     if (error) {
-      alert("Status update failed: " + error.message);
+      showToast("Status update failed: " + error.message, "error");
       setUpdatingId(null);
       return;
     }
 
     syncUpdatedReport({ status: newStatus }, reportId);
+    showToast("Status updated.", "success");
     setUpdatingId(null);
   }
 
@@ -116,26 +144,26 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
       .eq("id", selectedReport.id);
 
     if (error) {
-      alert("Could not save technical review: " + error.message);
+      showToast("Could not save technical review: " + error.message, "error");
       setUpdatingId(null);
       return;
     }
 
     syncUpdatedReport(payload, selectedReport.id);
     setUpdatingId(null);
-    alert("Technical review saved.");
+    showToast("Technical review saved.", "success");
   }
 
   async function sendForApproval() {
   if (!selectedReport || adminRole !== "it") return;
 
   if (!technicalAssessmentDraft.trim()) {
-    alert("Please add the technical assessment before sending for approval.");
+    showToast("Please add the technical assessment before sending for approval.", "warning");
     return;
   }
 
   if (repairabilityDraft !== "not_repairable") {
-    alert("Set repairability status to not repairable before sending for approval.");
+    showToast("Set repairability status to not repairable before sending for approval.", "warning");
     return;
   }
 
@@ -156,7 +184,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     .eq("id", selectedReport.id);
 
   if (error) {
-    alert("Could not send for approval: " + error.message);
+    showToast("Could not send for approval: " + error.message, "error");
     setUpdatingId(null);
     return;
   }
@@ -183,7 +211,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
 
   syncUpdatedReport(payload, selectedReport.id);
   setUpdatingId(null);
-  alert("Report sent to approver.");
+  showToast("Report sent to approver.", "success");
 }
 
   async function submitApprovalDecision(decision) {
@@ -205,7 +233,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     .eq("id", selectedReport.id);
 
   if (error) {
-    alert("Could not update approval: " + error.message);
+    showToast("Could not update approval: " + error.message, "error");
     setUpdatingId(null);
     return;
   }
@@ -233,7 +261,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
 
   syncUpdatedReport(payload, selectedReport.id);
   setUpdatingId(null);
-  alert(`Request ${decision}.`);
+  showToast(`Request ${decision}.`, "success");
 }
 
   async function viewAttachments(reportId) {
@@ -243,12 +271,12 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
       .eq("report_id", reportId);
 
     if (error) {
-      alert("Error loading attachments: " + error.message);
+      showToast("Error loading attachments: " + error.message, "error");
       return;
     }
 
     if (!data || data.length === 0) {
-      alert("No attachments for this report.");
+      showToast("No attachments for this report.", "info");
       return;
     }
 
@@ -258,7 +286,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         .createSignedUrl(file.file_path, 60);
 
       if (urlError) {
-        alert("Could not open attachment: " + urlError.message);
+        showToast("Could not open attachment: " + urlError.message, "error");
         continue;
       }
 
@@ -300,8 +328,11 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         (report) => (report.approval_status || "not_requested") === "pending"
       );
     }
+    if (adminRole === "hr") {
+      return reports;
+    }
     if (progressOnly) {
-      return reports.filter((report) => (report.status || "submitted") !== "submitted");
+      return reports.filter((report) => (report.status || "submitted") !== "resolved");
     }
     return reports;
   }, [reports, adminRole, progressOnly]);
@@ -328,9 +359,35 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         approvalFilter === "all" ||
         (report.approval_status || "not_requested") === approvalFilter;
 
-      return matchesSearch && matchesStatus && matchesSeverity && matchesApproval;
+      const matchesQuickFilter =
+        quickFilter === "all" ||
+        (quickFilter === "high_severity" && report.severity === "High") ||
+        (quickFilter === "pending_approval" &&
+          (report.approval_status || "not_requested") === "pending") ||
+        (quickFilter === "no_attachments" && !attachmentCounts[report.id]) ||
+        (quickFilter === "my_queue" &&
+          (adminRole === "approver"
+            ? (report.approval_status || "not_requested") === "pending"
+            : ["submitted", "in_progress"].includes(report.status || "submitted")));
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesSeverity &&
+        matchesApproval &&
+        matchesQuickFilter
+      );
     });
-  }, [roleScopedReports, searchTerm, statusFilter, severityFilter, approvalFilter]);
+  }, [
+    roleScopedReports,
+    searchTerm,
+    statusFilter,
+    severityFilter,
+    approvalFilter,
+    quickFilter,
+    attachmentCounts,
+    adminRole,
+  ]);
 
   const metrics = useMemo(() => {
     const total = roleScopedReports.length;
@@ -347,12 +404,30 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] px-6">
-        <div className="rounded-[28px] border border-zinc-200/80 bg-white px-6 py-5 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-          Loading reports...
+      <div className="min-h-[70vh] bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] p-4 sm:p-6">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <div className="h-36 animate-pulse rounded-[32px] border border-zinc-200/80 bg-white" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="h-24 animate-pulse rounded-[28px] border border-zinc-200/80 bg-white" />
+            ))}
+          </div>
+          <div className="h-[420px] animate-pulse rounded-[32px] border border-zinc-200/80 bg-white" />
         </div>
       </div>
     );
+  }
+
+  function openGjirafaSearch() {
+    const query = procurementQuery.trim();
+    if (!query) {
+      showToast("Please enter what HR should search for.", "warning");
+      return;
+    }
+
+    const slug = encodeURIComponent(query);
+    const searchUrl = `https://gjirafa50.com/search?q=${slug}`;
+    window.open(searchUrl, "_blank");
   }
 
   if (error) {
@@ -456,7 +531,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
           <MetricCard label="Pending approval" value={metrics.pendingApproval} tone="violet" />
         </section>
 
-        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.55fr_0.95fr]">
+        <section>
           <div className="overflow-hidden rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
             <div className="flex items-center justify-between border-b border-zinc-200/70 px-6 py-5">
               <div>
@@ -471,6 +546,33 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
               >
                 Refresh
               </button>
+            </div>
+            <div className="flex flex-wrap gap-2 border-b border-zinc-200/70 px-6 py-4">
+              <QuickChip
+                label="All"
+                active={quickFilter === "all"}
+                onClick={() => setQuickFilter("all")}
+              />
+              <QuickChip
+                label="High Severity"
+                active={quickFilter === "high_severity"}
+                onClick={() => setQuickFilter("high_severity")}
+              />
+              <QuickChip
+                label="Pending Approval"
+                active={quickFilter === "pending_approval"}
+                onClick={() => setQuickFilter("pending_approval")}
+              />
+              <QuickChip
+                label="No Attachments"
+                active={quickFilter === "no_attachments"}
+                onClick={() => setQuickFilter("no_attachments")}
+              />
+              <QuickChip
+                label="My Queue"
+                active={quickFilter === "my_queue"}
+                onClick={() => setQuickFilter("my_queue")}
+              />
             </div>
 
             <div className="overflow-x-auto">
@@ -556,22 +658,30 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
               </table>
             </div>
           </div>
+        </section>
 
-          <aside className="rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-            <div className="border-b border-zinc-200/70 px-6 py-5">
-              <h2 className="text-lg font-semibold text-zinc-900">Report details</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Select a report to review workflow actions.
-              </p>
-            </div>
+        {selectedReport ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+            <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200/70 bg-white/95 px-6 py-5 backdrop-blur-sm">
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-900">Report details</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Report #{selectedReport.id} - {selectedReport.employee_id}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedReport(null)}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+                >
+                  Close
+                </button>
+              </div>
 
-            {selectedReport ? (
               <div className="space-y-6 px-6 py-6">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-bold text-zinc-900">
-                      {selectedReport.full_name}
-                    </h3>
+                    <h3 className="text-xl font-bold text-zinc-900">{selectedReport.full_name}</h3>
                     <Badge
                       className={
                         STATUS_STYLES[selectedReport.status || "submitted"] ||
@@ -589,9 +699,6 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                       {labelize(selectedReport.approval_status || "not_requested")}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    Report #{selectedReport.id} - {selectedReport.employee_id}
-                  </p>
                 </div>
 
                 <DetailGroup
@@ -609,6 +716,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                     ["Approval status", selectedReport.approval_status || "not_requested"],
                   ]}
                 />
+                <TimelinePanel report={selectedReport} />
 
                 <TextPanel title="Description" text={selectedReport.description} />
                 <TextPanel
@@ -620,9 +728,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                 />
                 <TextPanel
                   title="Approver notes"
-                  text={
-                    selectedReport.approver_notes || "No approver notes recorded yet."
-                  }
+                  text={selectedReport.approver_notes || "No approver notes recorded yet."}
                 />
 
                 {adminRole === "it" ? (
@@ -765,14 +871,45 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                 ) : null}
 
                 {adminRole === "hr" ? (
-                  <div className="rounded-[28px] border border-amber-200 bg-amber-50/80 p-5 text-sm leading-7 text-amber-800 shadow-[0_6px_18px_rgba(0,0,0,0.04)]">
-                    HR has read-only access in this workflow. This view is intended for
-                    tracking employee impact, approved replacements, and operational
-                    follow-up.
+                  <div className="space-y-4">
+                    <div className="rounded-[28px] border border-amber-200 bg-amber-50/80 p-5 text-sm leading-7 text-amber-800 shadow-[0_6px_18px_rgba(0,0,0,0.04)]">
+                      HR has read-only access in this workflow. This view is intended for
+                      tracking employee impact, approved replacements, and operational
+                      follow-up.
+                    </div>
+
+                    <div className="rounded-[28px] border border-blue-200 bg-blue-50/80 p-5 shadow-[0_6px_18px_rgba(0,0,0,0.04)]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">
+                        Procurement Search
+                      </p>
+                      <p className="mt-2 text-sm text-blue-900">
+                        Search Gjirafa50 for replacement options.
+                      </p>
+                      <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                        <input
+                          value={procurementQuery}
+                          onChange={(e) => setProcurementQuery(e.target.value)}
+                          placeholder="e.g. Dell Latitude 5440, Lenovo ThinkPad..."
+                          className="w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={openGjirafaSearch}
+                          className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
+                        >
+                          Search Gjirafa50
+                        </button>
+                      </div>
+                      {(selectedReport.approval_status || "not_requested") !== "approved" ? (
+                        <p className="mt-2 text-xs text-blue-800/80">
+                          Tip: use this after the request is approved.
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
 
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => viewAttachments(selectedReport.id)}
                     className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700"
@@ -783,21 +920,13 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                     onClick={() => setSelectedReport(null)}
                     className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
                   >
-                    Clear
+                    Close details
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="px-6 py-14 text-center text-zinc-500">
-                <div className="mx-auto h-12 w-12 rounded-full bg-zinc-100" />
-                <p className="mt-4 text-sm leading-7">
-                  Choose any report from the table to see the full asset, workflow, and
-                  role-based actions.
-                </p>
-              </div>
-            )}
-          </aside>
-        </section>
+            </div>
+          </div>
+        ) : null}
 
         {confirmAction ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
@@ -836,8 +965,26 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
             </div>
           </div>
         ) : null}
+
+        {toast ? <Toast tone={toast.tone} message={toast.message} /> : null}
       </div>
     </div>
+  );
+}
+
+function QuickChip({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+        active
+          ? "bg-zinc-900 text-white"
+          : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -913,6 +1060,87 @@ function TextPanel({ title, text }) {
       <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-700">{text}</p>
     </div>
   );
+}
+
+function TimelinePanel({ report }) {
+  const stages = [
+    {
+      label: "Submitted",
+      done: true,
+      active: (report.status || "submitted") === "submitted",
+      at: report.created_at,
+    },
+    {
+      label: "In Progress",
+      done: ["in_progress", "resolved"].includes(report.status || "submitted"),
+      active: (report.status || "submitted") === "in_progress",
+      at: report.status === "in_progress" ? report.sent_for_approval_at || report.created_at : null,
+    },
+    {
+      label: "Pending Approval",
+      done: ["pending", "approved", "rejected"].includes(
+        report.approval_status || "not_requested"
+      ),
+      active: (report.approval_status || "not_requested") === "pending",
+      at: report.sent_for_approval_at,
+    },
+    {
+      label: "Resolved",
+      done:
+        report.status === "resolved" ||
+        (report.approval_status || "not_requested") === "approved",
+      active: report.status === "resolved",
+      at: report.approved_at || (report.status === "resolved" ? report.sent_for_approval_at || report.created_at : null),
+    },
+  ];
+
+  return (
+    <div className="rounded-[24px] border border-zinc-200/80 bg-white p-4 shadow-[0_4px_12px_rgba(0,0,0,0.03)]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        Workflow Timeline
+      </p>
+      <div className="mt-4 space-y-3">
+        {stages.map((stage) => (
+          <div key={stage.label} className="flex items-start gap-3">
+            <span
+              className={`mt-0.5 h-2.5 w-2.5 rounded-full ${
+                stage.done ? "bg-emerald-500" : stage.active ? "bg-blue-500" : "bg-zinc-300"
+              }`}
+            />
+            <div>
+              <p className="text-sm font-semibold text-zinc-900">{stage.label}</p>
+              <p className="text-xs text-zinc-500">
+                {stage.at ? formatDateTime(stage.at) : stage.done ? "Completed" : "Pending"}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Toast({ tone = "info", message }) {
+  const toneMap = {
+    info: "border-blue-200 bg-blue-50 text-blue-800",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warning: "border-amber-200 bg-amber-50 text-amber-800",
+    error: "border-red-200 bg-red-50 text-red-800",
+  };
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 max-w-sm">
+      <div className={`rounded-2xl border px-4 py-3 text-sm shadow-lg ${toneMap[tone]}`}>
+        {message}
+      </div>
+    </div>
+  );
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString();
 }
 
 function labelize(value) {

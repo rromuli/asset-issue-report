@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 
-export default function AssetIssueReportForm({ selectedAsset = null }) {
+export default function AssetIssueReportForm({ selectedAsset = null, session = null }) {
   const departments = [
     "IT",
     "HR",
@@ -132,11 +132,19 @@ export default function AssetIssueReportForm({ selectedAsset = null }) {
       setSubmitted(false);
       setSubmitError("");
 
+      const fallbackEmployeeId =
+        selectedAsset?.employee_id ||
+        session?.user?.user_metadata?.employee_id ||
+        session?.user?.email?.split("@")[0] ||
+        form.fullName.trim().toLowerCase().replace(/\s+/g, ".") ||
+        "employee";
+
       const { data: report, error: reportError } = await supabase
         .from("asset_issue_reports")
         .insert([
           {
             full_name: form.fullName,
+            employee_id: fallbackEmployeeId,
             department: form.department,
             preferred_contact: "directory",
             asset_type: form.assetType,
@@ -148,8 +156,8 @@ export default function AssetIssueReportForm({ selectedAsset = null }) {
             severity: form.severity,
             first_noticed_date: form.firstNoticedDate,
             description: form.description,
-            steps_taken: null,
-            additional_notes: null,
+            steps_taken: "Not provided",
+            additional_notes: "Not provided",
             status: "submitted",
           },
         ])

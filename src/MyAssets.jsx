@@ -39,6 +39,7 @@ const previewAssets = [
 export default function MyAssets({ session, onReportIssue }) {
   const [assets, setAssets] = useState([]);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
+  const [returnStatusByAssetId, setReturnStatusByAssetId] = useState({});
   const [loading, setLoading] = useState(!!session);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -54,12 +55,17 @@ export default function MyAssets({ session, onReportIssue }) {
     photo: null,
   });
 
+  const visibleAssets = assets.filter(
+    (asset) => returnStatusByAssetId[asset.id] !== "confirmed"
+  );
+
   useEffect(() => {
     if (session) {
       fetchAssets();
     } else {
       setAssets(previewAssets);
       setPhotoPreviewUrls({});
+      setReturnStatusByAssetId({});
       setLoading(false);
     }
   }, [session]);
@@ -84,7 +90,38 @@ export default function MyAssets({ session, onReportIssue }) {
     const nextAssets = data || [];
     setAssets(nextAssets);
     await loadPhotoPreviews(nextAssets);
+    await loadReturnRequestStatuses(nextAssets);
     setLoading(false);
+  }
+
+  async function loadReturnRequestStatuses(assetRows) {
+    if (!session || assetRows.length === 0) {
+      setReturnStatusByAssetId({});
+      return;
+    }
+
+    const assetIds = assetRows.map((asset) => asset.id);
+    const { data, error } = await supabase
+      .from("asset_return_requests")
+      .select("asset_id, status, requested_at")
+      .eq("employee_email", session.user.email)
+      .in("asset_id", assetIds)
+      .order("requested_at", { ascending: false });
+
+    if (error) {
+      // Table may not exist yet in some environments. Do not block the UI.
+      console.error("asset_return_requests load error:", error.message);
+      setReturnStatusByAssetId({});
+      return;
+    }
+
+    const latestByAssetId = {};
+    for (const row of data || []) {
+      if (!latestByAssetId[row.asset_id]) {
+        latestByAssetId[row.asset_id] = row.status || "pending";
+      }
+    }
+    setReturnStatusByAssetId(latestByAssetId);
   }
 
   async function loadPhotoPreviews(assetRows) {
@@ -214,6 +251,57 @@ export default function MyAssets({ session, onReportIssue }) {
 
     if (data?.signedUrl) {
       window.open(data.signedUrl, "_blank");
+    }
+  }
+
+  async function requestReturnConfirmation(asset) {
+    if (!session) {
+      showToast("Sign in first to submit a return confirmation request.", "warning");
+      return;
+    }
+
+    if (returnStatusByAssetId[asset.id] === "pending") {
+      showToast("You already have a pending return request for this asset.", "info");
+      return;
+    }
+
+    const payload = {
+      asset_id: asset.id,
+      employee_email: session.user.email,
+      employee_name: session.user.user_metadata?.full_name || session.user.email,
+      asset_name: asset.asset_name,
+      asset_type: asset.asset_type || null,
+      asset_tag: asset.asset_tag || null,
+      serial_number: asset.serial_number || null,
+      status: "pending",
+      requested_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("asset_return_requests").insert([payload]);
+    if (error) {
+      showToast("Could not create return request: " + error.message, "error");
+      return;
+    }
+
+    setReturnStatusByAssetId((current) => ({ ...current, [asset.id]: "pending" }));
+    showToast("Return request sent to HR for confirmation.", "success");
+
+    const { error: emailError } = await supabase.functions.invoke(
+      "send-asset-return-request-email",
+      {
+        body: {
+          employee_name: payload.employee_name,
+          employee_email: payload.employee_email,
+          asset_name: payload.asset_name,
+          asset_type: payload.asset_type,
+          asset_tag: payload.asset_tag,
+          serial_number: payload.serial_number,
+        },
+      }
+    );
+
+    if (emailError) {
+      console.error("Return request email error:", emailError.message);
     }
   }
 
@@ -363,7 +451,9 @@ export default function MyAssets({ session, onReportIssue }) {
               </p>
             </div>
             <div className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
-              {loading ? "Loading" : `${assets.length} item${assets.length === 1 ? "" : "s"}`}
+              {loading
+                ? "Loading"
+                : `${visibleAssets.length} item${visibleAssets.length === 1 ? "" : "s"}`}
             </div>
           </div>
 
@@ -376,13 +466,13 @@ export default function MyAssets({ session, onReportIssue }) {
                 />
               ))}
             </div>
-          ) : assets.length === 0 ? (
+          ) : visibleAssets.length === 0 ? (
             <div className="mt-4 rounded-[18px] bg-zinc-50 p-4 text-sm text-zinc-600">
               No assets registered yet. Click <strong>Add Asset</strong> to create your first record.
             </div>
           ) : (
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {assets.map((asset) => (
+              {visibleAssets.map((asset) => (
                 <div
                   key={asset.id}
                   className="rounded-[20px] border border-zinc-200/80 bg-zinc-50/70 p-3.5 shadow-[0_4px_14px_rgba(0,0,0,0.04)]"
@@ -454,6 +544,24 @@ export default function MyAssets({ session, onReportIssue }) {
                       className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
                     >
                       Report Issue
+                    </button>
+
+                    <button
+                      onClick={() => requestReturnConfirmation(asset)}
+                      disabled={returnStatusByAssetId[asset.id] === "pending"}
+                      className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                        returnStatusByAssetId[asset.id] === "pending"
+                          ? "cursor-not-allowed border border-amber-300 bg-amber-50 text-amber-700"
+                          : returnStatusByAssetId[asset.id] === "confirmed"
+                          ? "border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : "border border-zinc-300 bg-white text-zinc-700 hover:-translate-y-0.5 hover:bg-zinc-50"
+                      }`}
+                    >
+                      {returnStatusByAssetId[asset.id] === "pending"
+                        ? "Return Requested"
+                        : returnStatusByAssetId[asset.id] === "confirmed"
+                        ? "Return Confirmed"
+                        : "I Returned This Asset"}
                     </button>
                   </div>
                 </div>

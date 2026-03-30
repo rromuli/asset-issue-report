@@ -25,6 +25,7 @@ const APPROVAL_STYLES = {
 
 export default function AdminDashboard({ session, adminRole, progressOnly = false }) {
   const [reports, setReports] = useState([]);
+  const [returnRequests, setReturnRequests] = useState([]);
   const [attachmentCounts, setAttachmentCounts] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,11 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     setLoading(true);
     setError("");
 
-    const [{ data, error }, { data: attachmentRows, error: attachmentError }] =
+    const [
+      { data, error },
+      { data: attachmentRows, error: attachmentError },
+      { data: returnRows, error: returnError },
+    ] =
       await Promise.all([
         supabase
           .from("asset_issue_reports")
@@ -68,6 +73,12 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
           )
           .order("created_at", { ascending: false }),
         supabase.from("asset_issue_attachments").select("report_id"),
+        supabase
+          .from("asset_return_requests")
+          .select(
+            "id, asset_id, employee_email, employee_name, asset_name, asset_type, asset_tag, serial_number, status, requested_at, confirmed_at, confirmed_by, notes"
+          )
+          .order("requested_at", { ascending: false }),
       ]);
 
     if (error) {
@@ -83,6 +94,13 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         return acc;
       }, {});
       setAttachmentCounts(counts);
+    }
+    if (returnError) {
+      // Keep dashboard working even if this table isn't migrated in one environment yet.
+      console.error("asset_return_requests load error:", returnError.message);
+      setReturnRequests([]);
+    } else {
+      setReturnRequests(returnRows || []);
     }
     setLoading(false);
   }
@@ -430,6 +448,45 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     window.open(searchUrl, "_blank");
   }
 
+  async function confirmReturnRequest(request) {
+    if (adminRole !== "hr") return;
+
+    const payload = {
+      status: "confirmed",
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: session?.user?.email || null,
+    };
+
+    const { error } = await supabase
+      .from("asset_return_requests")
+      .update(payload)
+      .eq("id", request.id);
+
+    if (error) {
+      showToast("Could not confirm return: " + error.message, "error");
+      return;
+    }
+
+    if (request.asset_id) {
+      const { error: deleteError } = await supabase
+        .from("employee_assets")
+        .delete()
+        .eq("id", request.asset_id);
+
+      if (deleteError) {
+        showToast(
+          "Return confirmed, but asset removal failed: " + deleteError.message,
+          "warning"
+        );
+      }
+    }
+
+    setReturnRequests((current) =>
+      current.map((row) => (row.id === request.id ? { ...row, ...payload } : row))
+    );
+    showToast("Asset return confirmed by HR.", "success");
+  }
+
   if (error) {
     return (
       <div className="min-h-[70vh] bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] p-6">
@@ -530,6 +587,88 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
           <MetricCard label="In progress" value={metrics.inProgress} tone="blue" />
           <MetricCard label="Pending approval" value={metrics.pendingApproval} tone="violet" />
         </section>
+
+        {adminRole === "hr" ? (
+          <section className="overflow-hidden rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+            <div className="border-b border-zinc-200/70 px-6 py-5">
+              <h2 className="text-lg font-semibold text-zinc-900">
+                Asset Return Confirmation Queue
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Confirm employees who marked assets as returned.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-zinc-50/80 text-left text-zinc-500">
+                  <tr>
+                    <th className="px-6 py-4 font-semibold">Employee</th>
+                    <th className="px-6 py-4 font-semibold">Asset</th>
+                    <th className="px-6 py-4 font-semibold">Requested</th>
+                    <th className="px-6 py-4 font-semibold">Status</th>
+                    <th className="px-6 py-4 font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {returnRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                        No asset return requests yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    returnRequests.map((request) => (
+                      <tr key={request.id} className="border-t border-zinc-200/70">
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-zinc-900">
+                            {request.employee_name || request.employee_email}
+                          </div>
+                          <div className="mt-1 text-xs text-zinc-500">{request.employee_email}</div>
+                        </td>
+                        <td className="px-6 py-4 text-zinc-700">
+                          <div className="font-medium text-zinc-900">{request.asset_name}</div>
+                          <div className="mt-1 text-xs text-zinc-500">
+                            {request.asset_type || "-"} | Tag: {request.asset_tag || "-"} | SN:{" "}
+                            {request.serial_number || "-"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-zinc-700">
+                          {request.requested_at ? formatDateTime(request.requested_at) : "-"}
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge
+                            className={
+                              request.status === "confirmed"
+                                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                : "bg-amber-50 text-amber-700 ring-amber-200"
+                            }
+                          >
+                            {labelize(request.status || "pending")}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4">
+                          {request.status === "confirmed" ? (
+                            <span className="text-xs text-zinc-500">
+                              Confirmed {request.confirmed_at ? formatDateTime(request.confirmed_at) : ""}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => confirmReturnRequest(request)}
+                              className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700"
+                            >
+                              Confirm Return
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
         <section>
           <div className="overflow-hidden rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">

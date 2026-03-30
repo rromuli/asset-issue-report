@@ -237,10 +237,10 @@ export default function App() {
 
                 <div>
                   <h1 className="text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
-                    Internal IT Operations
+                    Asset Managmet System
                   </h1>
                   <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
-                    Asset Managmet System
+                    Internal IT Operations
                   </p>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { supabase } from "./supabaseClient";
-import amsGjirafaLogo from "./assets/ams-gjirafa-logo.svg";
+import amsGjirafaLogo from "./assets/gjirafa-logo.svg";
 
 export default function AdminLogin({ onClose, onSuccess }) {
   const [email, setEmail] = useState("");

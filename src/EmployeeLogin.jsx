@@ -47,7 +47,7 @@ export default function EmployeeLogin({ onAdminLogin }) {
 
       <div className="mx-auto max-w-md rounded-[30px] border border-zinc-200/80 bg-white/95 p-7 shadow-[0_20px_55px_rgba(15,23,42,0.12)] ring-1 ring-white sm:p-8">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-          Internal IT Operations
+          Asset Managment System
         </p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900 sm:text-[28px]">
           Employee Login

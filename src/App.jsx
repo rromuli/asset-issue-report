@@ -3,7 +3,14 @@ import MyAssets from "./MyAssets";
 import AssetIssueReportForm from "./AssetIssueReportForm";
 import AdminDashboard from "./AdminDashboard";
 import AdminLogin from "./AdminLogin";
+import AllReports from "./AllReports";
+import EmployeeLogin from "./EmployeeLogin";
 import { supabase } from "./supabaseClient";
+
+const FALLBACK_ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "rron.s@gjirafa.com")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("assets");
@@ -20,6 +27,8 @@ export default function App() {
 
     if (requestedView === "admin") {
       setActiveTab("admin");
+    } else if (requestedView === "all_reports") {
+      setActiveTab("all_reports");
     } else if (requestedView === "issues") {
       setActiveTab("issues");
     } else {
@@ -50,22 +59,31 @@ export default function App() {
         return;
       }
 
+      const currentEmail = session.user.email.toLowerCase();
+
       const { data, error } = await supabase
         .from("admin_users")
         .select("email, role")
-        .eq("email", session.user.email)
+        .eq("email", currentEmail)
         .maybeSingle();
 
       if (error) {
         console.error(error);
-        setIsAdmin(false);
-        setAdminRole(null);
+        const isFallbackAdmin = FALLBACK_ADMIN_EMAILS.includes(currentEmail);
+        setIsAdmin(isFallbackAdmin);
+        setAdminRole(isFallbackAdmin ? "it" : null);
         setCheckingAdmin(false);
         return;
       }
 
-      setIsAdmin(!!data);
-      setAdminRole(data?.role || null);
+      if (data) {
+        setIsAdmin(true);
+        setAdminRole(data.role || "it");
+      } else {
+        const isFallbackAdmin = FALLBACK_ADMIN_EMAILS.includes(currentEmail);
+        setIsAdmin(isFallbackAdmin);
+        setAdminRole(isFallbackAdmin ? "it" : null);
+      }
       setCheckingAdmin(false);
     }
 
@@ -99,6 +117,21 @@ export default function App() {
     window.history.replaceState({}, "", "/?view=admin");
   }
 
+  function openAllReportsTab() {
+    if (!session) {
+      setShowAdminLogin(true);
+      return;
+    }
+
+    if (!isAdmin) {
+      setActiveTab("assets");
+      return;
+    }
+
+    setActiveTab("all_reports");
+    window.history.replaceState({}, "", "/?view=all_reports");
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     setActiveTab("assets");
@@ -117,12 +150,44 @@ export default function App() {
   }
 
   function renderMainContent() {
+    if (!session) {
+      return <EmployeeLogin onAdminLogin={() => setShowAdminLogin(true)} />;
+    }
+
     if (activeTab === "assets") {
       return <MyAssets session={session} onReportIssue={handleReportIssueFromAsset} />;
     }
 
     if (activeTab === "issues") {
       return <AssetIssueReportForm selectedAsset={selectedAsset} />;
+    }
+
+    if (activeTab === "all_reports") {
+      if (checkingAdmin) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              Checking admin access...
+            </div>
+          </div>
+        );
+      }
+
+      if (!isAdmin) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              <h2 className="text-lg font-semibold">Access denied</h2>
+              <p className="mt-2 text-sm leading-7">
+                Your account is signed in, but it does not currently have permission to
+                access all reports.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      return <AllReports />;
     }
 
     if (activeTab === "admin") {
@@ -150,7 +215,7 @@ export default function App() {
         );
       }
 
-      return <AdminDashboard session={session} adminRole={adminRole} />;
+      return <AdminDashboard session={session} adminRole={adminRole} progressOnly />;
     }
 
     return <MyAssets session={session} onReportIssue={handleReportIssueFromAsset} />;
@@ -174,42 +239,57 @@ export default function App() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="inline-flex rounded-[20px] border border-zinc-200/80 bg-white/70 p-1 shadow-[0_8px_20px_rgba(0,0,0,0.05)]">
-                <button
-                  onClick={openAssetsTab}
-                  className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                    activeTab === "assets"
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-zinc-700 hover:bg-white"
-                  }`}
-                >
-                  My Assets
-                </button>
-
-                <button
-                  onClick={openIssuesTab}
-                  className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                    activeTab === "issues"
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-zinc-700 hover:bg-white"
-                  }`}
-                >
-                  Issue Reports
-                </button>
-
-                {session && isAdmin ? (
+              {session ? (
+                <div className="inline-flex rounded-[20px] border border-zinc-200/80 bg-white/70 p-1 shadow-[0_8px_20px_rgba(0,0,0,0.05)]">
                   <button
-                    onClick={openAdminTab}
+                    onClick={openAssetsTab}
                     className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                      activeTab === "admin"
+                      activeTab === "assets"
                         ? "bg-blue-600 text-white shadow-sm"
                         : "text-zinc-700 hover:bg-white"
                     }`}
                   >
-                    Admin Dashboard
+                    My Assets
                   </button>
-                ) : null}
-              </div>
+
+                  <button
+                    onClick={openIssuesTab}
+                    className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                      activeTab === "issues"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-zinc-700 hover:bg-white"
+                    }`}
+                  >
+                    Issue Reports
+                  </button>
+
+                  {isAdmin ? (
+                    <button
+                      onClick={openAllReportsTab}
+                      className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                        activeTab === "all_reports"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-zinc-700 hover:bg-white"
+                      }`}
+                    >
+                      All Reports
+                    </button>
+                  ) : null}
+
+                  {isAdmin ? (
+                    <button
+                      onClick={openAdminTab}
+                      className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                        activeTab === "admin"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-zinc-700 hover:bg-white"
+                      }`}
+                    >
+                      Admin Dashboard
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="flex items-center gap-3">
                 {session ? (
@@ -222,7 +302,7 @@ export default function App() {
                       {adminRole ? (
                         <>
                           {" "}
-                          • <span className="uppercase">{adminRole}</span>
+                          - <span className="uppercase">{adminRole}</span>
                         </>
                       ) : null}
                     </div>

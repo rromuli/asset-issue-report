@@ -14,7 +14,6 @@ const SEVERITY_STYLES = {
   Low: "bg-zinc-100 text-zinc-700 ring-zinc-200",
   Medium: "bg-amber-50 text-amber-700 ring-amber-200",
   High: "bg-orange-50 text-orange-700 ring-orange-200",
-  Critical: "bg-red-50 text-red-700 ring-red-200",
 };
 
 const APPROVAL_STYLES = {
@@ -24,7 +23,7 @@ const APPROVAL_STYLES = {
   rejected: "bg-red-50 text-red-700 ring-red-200",
 };
 
-export default function AdminDashboard({ session, adminRole }) {
+export default function AdminDashboard({ session, adminRole, progressOnly = false }) {
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -301,8 +300,11 @@ export default function AdminDashboard({ session, adminRole }) {
         (report) => (report.approval_status || "not_requested") === "pending"
       );
     }
+    if (progressOnly) {
+      return reports.filter((report) => (report.status || "submitted") !== "submitted");
+    }
     return reports;
-  }, [reports, adminRole]);
+  }, [reports, adminRole, progressOnly]);
 
   const filteredReports = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -502,7 +504,7 @@ export default function AdminDashboard({ session, adminRole }) {
                         <td className="px-6 py-4">
                           <div className="font-semibold text-zinc-900">{report.full_name}</div>
                           <div className="mt-1 text-xs text-zinc-500">
-                            {report.employee_id} • {report.department}
+                            {report.employee_id} - {report.department}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -588,7 +590,7 @@ export default function AdminDashboard({ session, adminRole }) {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-zinc-500">
-                    Report #{selectedReport.id} • {selectedReport.employee_id}
+                    Report #{selectedReport.id} - {selectedReport.employee_id}
                   </p>
                 </div>
 

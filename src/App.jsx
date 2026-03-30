@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import MyAssets from "./MyAssets";
 import AssetIssueReportForm from "./AssetIssueReportForm";
 import AdminDashboard from "./AdminDashboard";
 import AdminLogin from "./AdminLogin";
 import { supabase } from "./supabaseClient";
 
 export default function App() {
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState("assets");
   const [showLogin, setShowLogin] = useState(false);
   const [session, setSession] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -17,7 +18,11 @@ export default function App() {
     const requestedView = params.get("view");
 
     if (requestedView === "admin") {
-      setShowAdmin(true);
+      setActiveTab("admin");
+    } else if (requestedView === "issues") {
+      setActiveTab("issues");
+    } else {
+      setActiveTab("assets");
     }
 
     supabase.auth.getSession().then(({ data }) => {
@@ -26,8 +31,8 @@ export default function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session ?? null);
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession ?? null);
     });
 
     return () => subscription.unsubscribe();
@@ -66,29 +71,94 @@ export default function App() {
     checkAdminAccess();
   }, [session]);
 
-  useEffect(() => {
-    if (showAdmin && !session) {
-      setShowLogin(true);
-    }
-  }, [showAdmin, session]);
+  function openAssetsTab() {
+    setActiveTab("assets");
+    setShowLogin(false);
+    window.history.replaceState({}, "", "/");
+  }
 
-  function openAdminArea() {
-    setShowAdmin(true);
+  function openIssuesTab() {
+    setActiveTab("issues");
+    setShowLogin(false);
+    window.history.replaceState({}, "", "/?view=issues");
+  }
+
+  function openAdminTab() {
+    if (!session) {
+      setShowLogin(true);
+      return;
+    }
+
+    if (!isAdmin) {
+      setActiveTab("assets");
+      return;
+    }
+
+    setActiveTab("admin");
+    window.history.replaceState({}, "", "/?view=admin");
   }
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    setShowAdmin(false);
+    setActiveTab("assets");
     setIsAdmin(false);
     setAdminRole(null);
     setShowLogin(false);
     window.history.replaceState({}, "", "/");
   }
 
-  function openReportForm() {
-    setShowAdmin(false);
-    setShowLogin(false);
-    window.history.replaceState({}, "", "/");
+  function renderMainContent() {
+    if (activeTab === "assets") {
+      return <MyAssets session={session} />;
+    }
+
+    if (activeTab === "issues") {
+      return <AssetIssueReportForm />;
+    }
+
+    if (activeTab === "admin") {
+      if (!session) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-amber-200 bg-amber-50 px-6 py-6 text-amber-900 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              <h2 className="text-lg font-semibold">Admin authentication required</h2>
+              <p className="mt-2 text-sm leading-7 text-amber-800">
+                Please sign in with an approved administrator account to access the
+                dashboard.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      if (checkingAdmin) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              Checking admin access...
+            </div>
+          </div>
+        );
+      }
+
+      if (!isAdmin) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              <h2 className="text-lg font-semibold">Access denied</h2>
+              <p className="mt-2 text-sm leading-7">
+                Your account is signed in, but it does not currently have permission to
+                access the administrative dashboard.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      return <AdminDashboard session={session} adminRole={adminRole} />;
+    }
+
+    return <MyAssets session={session} />;
   }
 
   return (
@@ -106,10 +176,10 @@ export default function App() {
                   GJIRAFA • Internal IT Operations
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-                  Asset Issue Reporting System
+                  Asset Lifecycle Portal
                 </h1>
                 <p className="mt-1 text-sm leading-7 text-zinc-600 sm:text-base">
-                  Centralized issue intake, administrative review, and replacement approval workflow.
+                  Employee asset registration, issue reporting, and approval workflow.
                 </p>
               </div>
             </div>
@@ -117,110 +187,87 @@ export default function App() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="inline-flex rounded-[20px] border border-zinc-200/80 bg-white/70 p-1 shadow-[0_8px_20px_rgba(0,0,0,0.05)]">
                 <button
-                  onClick={openReportForm}
+                  onClick={openAssetsTab}
                   className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                    !showAdmin
+                    activeTab === "assets"
                       ? "bg-blue-600 text-white shadow-sm"
                       : "text-zinc-700 hover:bg-white"
                   }`}
                 >
-                  Report Form
+                  My Assets
                 </button>
+
                 <button
-                  onClick={openAdminArea}
+                  onClick={openIssuesTab}
                   className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                    showAdmin
+                    activeTab === "issues"
                       ? "bg-blue-600 text-white shadow-sm"
                       : "text-zinc-700 hover:bg-white"
                   }`}
                 >
-                  Admin Dashboard
+                  Issue Reports
                 </button>
+
+                {isAdmin ? (
+                  <button
+                    onClick={openAdminTab}
+                    className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                      activeTab === "admin"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-zinc-700 hover:bg-white"
+                    }`}
+                  >
+                    Admin Dashboard
+                  </button>
+                ) : null}
               </div>
 
               <div className="flex items-center gap-3">
                 {session ? (
-                  <div className="hidden rounded-[20px] border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
-                    Signed in as{" "}
-                    <span className="font-medium text-zinc-900">
-                      {session.user.email}
-                    </span>
-                    {adminRole ? (
-                      <>
-                        {" "}
-                        • <span className="uppercase">{adminRole}</span>
-                      </>
-                    ) : null}
-                  </div>
+                  <>
+                    <div className="hidden rounded-[20px] border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
+                      Signed in as{" "}
+                      <span className="font-medium text-zinc-900">
+                        {session.user.email}
+                      </span>
+                      {adminRole ? (
+                        <>
+                          {" "}
+                          • <span className="uppercase">{adminRole}</span>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <button
+                      onClick={handleLogout}
+                      className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
+                    >
+                      Logout
+                    </button>
+                  </>
                 ) : (
                   <div className="hidden rounded-[20px] border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
-                    Public employee form active
+                    Authentication will be connected later
                   </div>
                 )}
-
-                {session ? (
-                  <button
-                    onClick={handleLogout}
-                    className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
-                  >
-                    Logout
-                  </button>
-                ) : null}
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main>
-        {showLogin ? (
-          <AdminLogin
-            onClose={() => {
-              setShowLogin(false);
-              if (!session) setShowAdmin(false);
-            }}
-            onSuccess={() => {
-              setShowLogin(false);
-              setShowAdmin(true);
-              window.history.replaceState({}, "", "/?view=admin");
-            }}
-          />
-        ) : null}
+      <main>{renderMainContent()}</main>
 
-        {showAdmin ? (
-          !session ? (
-            <div className="px-4 py-10 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-4xl rounded-[32px] border border-amber-200 bg-amber-50 px-6 py-6 text-amber-900 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-                <h2 className="text-lg font-semibold">Admin authentication required</h2>
-                <p className="mt-2 text-sm leading-7 text-amber-800">
-                  Please sign in with an approved administrator account to access the
-                  dashboard, review submissions, and manage issue status.
-                </p>
-              </div>
-            </div>
-          ) : checkingAdmin ? (
-            <div className="px-4 py-10 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-                Checking admin access...
-              </div>
-            </div>
-          ) : isAdmin ? (
-            <AdminDashboard session={session} adminRole={adminRole} />
-          ) : (
-            <div className="px-4 py-10 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-                <h2 className="text-lg font-semibold">Access denied</h2>
-                <p className="mt-2 text-sm leading-7">
-                  Your account is signed in, but it does not currently have permission to
-                  access the administrative dashboard.
-                </p>
-              </div>
-            </div>
-          )
-        ) : (
-          <AssetIssueReportForm />
-        )}
-      </main>
+      {showLogin ? (
+        <AdminLogin
+          onClose={() => setShowLogin(false)}
+          onSuccess={() => {
+            setShowLogin(false);
+            setActiveTab("admin");
+            window.history.replaceState({}, "", "/?view=admin");
+          }}
+        />
+      ) : null}
     </div>
   );
 }

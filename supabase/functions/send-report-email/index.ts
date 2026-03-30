@@ -105,7 +105,7 @@ serve(async (req) => {
                   </div>
 
                   <div style="margin-top:24px;">
-                    <a href="http://localhost:5173/?view=admin" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:14px 22px;border-radius:16px;">
+                    <a href="https://asset-issue-report.vercel.app/?view=admin" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:14px 22px;border-radius:16px;">
                       Open Admin Dashboard
                     </a>
                   </div>

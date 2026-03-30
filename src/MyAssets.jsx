@@ -1,11 +1,44 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
 
-const assetTypes = ["Laptop", "Phone", "Monitor", "Keyboard", "Mouse", "Accessory", "Other"];
+const assetTypes = [
+  "Laptop",
+  "Phone",
+  "Monitor",
+  "Keyboard",
+  "Mouse",
+  "Accessory",
+  "Other",
+];
+
+const previewAssets = [
+  {
+    id: 101,
+    asset_name: "Work Laptop",
+    asset_type: "Laptop",
+    serial_number: "C02XG2JHJGH5",
+    asset_tag: "IT-LAP-0042",
+    make_model: "Dell Latitude 5440",
+    assigned_at: new Date().toISOString(),
+    condition_notes: "Device is in good condition with light signs of daily use.",
+    condition_photo_path: null,
+  },
+  {
+    id: 102,
+    asset_name: "Company Phone",
+    asset_type: "Phone",
+    serial_number: "SN-IPH-8821",
+    asset_tag: "IT-PHN-0018",
+    make_model: "iPhone 14",
+    assigned_at: new Date().toISOString(),
+    condition_notes: "Minor cosmetic wear on frame. Screen condition is good.",
+    condition_photo_path: null,
+  },
+];
 
 export default function MyAssets({ session }) {
   const [assets, setAssets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!session);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -20,8 +53,13 @@ export default function MyAssets({ session }) {
   });
 
   useEffect(() => {
-    fetchAssets();
-  }, []);
+    if (session) {
+      fetchAssets();
+    } else {
+      setAssets(previewAssets);
+      setLoading(false);
+    }
+  }, [session]);
 
   async function fetchAssets() {
     setLoading(true);
@@ -48,6 +86,12 @@ export default function MyAssets({ session }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    if (!session) {
+      alert("Authentication will be connected later. For now this page is in preview mode.");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
 
@@ -71,22 +115,20 @@ export default function MyAssets({ session }) {
         photoPath = filePath;
       }
 
-      const { error: insertError } = await supabase
-        .from("employee_assets")
-        .insert([
-          {
-            user_id: session.user.id,
-            employee_email: session.user.email,
-            employee_name: session.user.user_metadata?.full_name || session.user.email,
-            asset_name: form.assetName,
-            asset_type: form.assetType,
-            serial_number: form.serialNumber || null,
-            asset_tag: form.assetTag || null,
-            make_model: form.makeModel || null,
-            condition_notes: form.conditionNotes || null,
-            condition_photo_path: photoPath,
-          },
-        ]);
+      const { error: insertError } = await supabase.from("employee_assets").insert([
+        {
+          user_id: session.user.id,
+          employee_email: session.user.email,
+          employee_name: session.user.user_metadata?.full_name || session.user.email,
+          asset_name: form.assetName,
+          asset_type: form.assetType,
+          serial_number: form.serialNumber || null,
+          asset_tag: form.assetTag || null,
+          make_model: form.makeModel || null,
+          condition_notes: form.conditionNotes || null,
+          condition_photo_path: photoPath,
+        },
+      ]);
 
       if (insertError) {
         setError(insertError.message);
@@ -107,14 +149,15 @@ export default function MyAssets({ session }) {
       setShowForm(false);
       fetchAssets();
     } catch (err) {
-      setError(err.message);
+      console.error(err);
+      setError("Unexpected error: " + err.message);
     } finally {
       setSubmitting(false);
     }
   }
 
   async function openPhoto(path) {
-    if (!path) return;
+    if (!path || !session) return;
 
     const { data, error } = await supabase.storage
       .from("asset-photos")
@@ -144,7 +187,7 @@ export default function MyAssets({ session }) {
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">
                 View assets registered under your name, document their current condition,
-                and prepare for future support or replacement workflows.
+                and prepare for support or replacement workflows.
               </p>
             </div>
 
@@ -155,6 +198,13 @@ export default function MyAssets({ session }) {
               {showForm ? "Close form" : "Add Asset"}
             </button>
           </div>
+
+          {!session ? (
+            <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-800">
+              Preview mode is active right now. Google / OIDC login and real asset saving
+              will be connected next.
+            </div>
+          ) : null}
         </section>
 
         {showForm ? (
@@ -246,7 +296,7 @@ export default function MyAssets({ session }) {
                   disabled={submitting}
                   className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 disabled:opacity-60"
                 >
-                  {submitting ? "Saving asset..." : "Save Asset"}
+                  {submitting ? "Saving asset..." : session ? "Save Asset" : "Preview Only"}
                 </button>
 
                 <button
@@ -294,7 +344,14 @@ export default function MyAssets({ session }) {
                     <AssetRow label="Make / Model" value={asset.make_model} />
                     <AssetRow label="Serial Number" value={asset.serial_number} />
                     <AssetRow label="Asset Tag" value={asset.asset_tag} />
-                    <AssetRow label="Assigned" value={asset.assigned_at ? new Date(asset.assigned_at).toLocaleDateString() : "-"} />
+                    <AssetRow
+                      label="Assigned"
+                      value={
+                        asset.assigned_at
+                          ? new Date(asset.assigned_at).toLocaleDateString()
+                          : "-"
+                      }
+                    />
                   </div>
 
                   <div className="mt-5 rounded-[20px] bg-zinc-50 p-4">
@@ -307,7 +364,7 @@ export default function MyAssets({ session }) {
                   </div>
 
                   <div className="mt-5 flex gap-3">
-                    {asset.condition_photo_path ? (
+                    {asset.condition_photo_path && session ? (
                       <button
                         onClick={() => openPhoto(asset.condition_photo_path)}
                         className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"

@@ -313,7 +313,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="w-full overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+                <div className="w-full overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
                   <div className="inline-flex min-w-max rounded-[18px] border border-zinc-200/90 bg-zinc-100/70 p-1 shadow-[0_10px_24px_rgba(0,0,0,0.06)]">
                     <button
                       onClick={openAssetsTab}

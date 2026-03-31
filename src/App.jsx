@@ -228,7 +228,7 @@ export default function App() {
         <header className="sticky top-0 z-40 border-b border-white/60 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.04)] backdrop-blur-2xl">
           <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
                 <img
                   src={gjirafaLogo}
                   alt="Gjirafa"
@@ -246,58 +246,60 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="inline-flex rounded-[18px] border border-zinc-200/90 bg-zinc-100/70 p-1 shadow-[0_10px_24px_rgba(0,0,0,0.06)]">
-                  <button
-                    onClick={openAssetsTab}
-                    className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                      activeTab === "assets"
-                        ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
-                        : "text-zinc-700 hover:bg-white/80"
-                    }`}
-                  >
-                    My Assets
-                  </button>
-
-                  <button
-                    onClick={openIssuesTab}
-                    className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                      activeTab === "issues"
-                        ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
-                        : "text-zinc-700 hover:bg-white/80"
-                    }`}
-                  >
-                    Issue Reports
-                  </button>
-
-                  {isAdmin ? (
+                <div className="w-full overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+                  <div className="inline-flex min-w-max rounded-[18px] border border-zinc-200/90 bg-zinc-100/70 p-1 shadow-[0_10px_24px_rgba(0,0,0,0.06)]">
                     <button
-                      onClick={openAllReportsTab}
+                      onClick={openAssetsTab}
                       className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                        activeTab === "all_reports"
+                        activeTab === "assets"
                           ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
                           : "text-zinc-700 hover:bg-white/80"
                       }`}
                     >
-                      All Reports
+                      My Assets
                     </button>
-                  ) : null}
 
-                  {isAdmin ? (
                     <button
-                      onClick={openAdminTab}
+                      onClick={openIssuesTab}
                       className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                        activeTab === "admin"
+                        activeTab === "issues"
                           ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
                           : "text-zinc-700 hover:bg-white/80"
                       }`}
                     >
-                      Admin Dashboard
+                      Issue Reports
                     </button>
-                  ) : null}
+
+                    {isAdmin ? (
+                      <button
+                        onClick={openAllReportsTab}
+                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                          activeTab === "all_reports"
+                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                            : "text-zinc-700 hover:bg-white/80"
+                        }`}
+                      >
+                        All Reports
+                      </button>
+                    ) : null}
+
+                    {isAdmin ? (
+                      <button
+                        onClick={openAdminTab}
+                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                          activeTab === "admin"
+                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                            : "text-zinc-700 hover:bg-white/80"
+                        }`}
+                      >
+                        Admin Dashboard
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="hidden rounded-[16px] border border-zinc-200/80 bg-white/90 px-4 py-2.5 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
+                  <div className="hidden max-w-[320px] truncate rounded-[16px] border border-zinc-200/80 bg-white/90 px-4 py-2.5 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
                     <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" />{" "}
                     Signed in as{" "}
                     <span className="font-medium text-zinc-900">

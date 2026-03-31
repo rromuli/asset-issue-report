@@ -271,7 +271,7 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
             {selectedAsset ? (
               <div className="rounded-[18px] border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm leading-5 text-blue-800 md:max-w-sm">
                 <div className="font-semibold text-blue-900">
-                  {selectedAsset.asset_name} • {selectedAsset.asset_type}
+                  {selectedAsset.asset_name} - {selectedAsset.asset_type}
                 </div>
                 <div>
                   Serial: {selectedAsset.serial_number || "-"} | Tag: {selectedAsset.asset_tag || "-"}

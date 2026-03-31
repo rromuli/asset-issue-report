@@ -529,7 +529,7 @@ export default function MyAssets({ session, onReportIssue }) {
                     </p>
                   </div>
 
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {asset.condition_photo_path && session ? (
                       <button
                         onClick={() => openPhoto(asset.condition_photo_path)}
@@ -601,7 +601,7 @@ function AssetRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="text-zinc-500">{label}</span>
-      <span className="text-right font-medium text-zinc-900">{value || "-"}</span>
+      <span className="break-all text-right font-medium text-zinc-900">{value || "-"}</span>
     </div>
   );
 }
@@ -615,7 +615,7 @@ function InlineToast({ tone = "info", message }) {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-sm">
+    <div className="fixed bottom-4 left-4 right-4 z-50 sm:bottom-5 sm:left-auto sm:right-5 sm:max-w-sm">
       <div className={`rounded-2xl border px-4 py-3 text-sm shadow-lg ${toneMap[tone]}`}>
         {message}
       </div>

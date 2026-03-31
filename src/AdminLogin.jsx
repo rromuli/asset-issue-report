@@ -29,7 +29,7 @@ export default function AdminLogin({ onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-zinc-950/45 px-4 py-6 backdrop-blur-md sm:items-center sm:py-8">
       <div className="w-full max-w-md rounded-[30px] border border-zinc-200/90 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] ring-1 ring-white sm:p-7">
         <img
           src={amsGjirafaLogo}

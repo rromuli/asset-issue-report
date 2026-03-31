@@ -500,14 +500,14 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.06),_transparent_22%),#f6f7fb] p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-[32px] border border-zinc-200/80 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-8">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+        <section className="rounded-[28px] border border-zinc-200/80 bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:rounded-[32px] sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Internal IT Operations
               </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-5xl">
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900 sm:text-5xl">
                 Asset Issue Dashboard
               </h1>
               <div className="mt-4 flex flex-wrap gap-3">
@@ -589,8 +589,8 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         </section>
 
         {adminRole === "hr" ? (
-          <section className="overflow-hidden rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-            <div className="border-b border-zinc-200/70 px-6 py-5">
+          <section className="overflow-hidden rounded-[28px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:rounded-[32px]">
+            <div className="border-b border-zinc-200/70 px-4 py-4 sm:px-6 sm:py-5">
               <h2 className="text-lg font-semibold text-zinc-900">
                 Asset Return Confirmation Queue
               </h2>
@@ -600,43 +600,43 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-[720px] text-sm">
                 <thead className="bg-zinc-50/80 text-left text-zinc-500">
                   <tr>
-                    <th className="px-6 py-4 font-semibold">Employee</th>
-                    <th className="px-6 py-4 font-semibold">Asset</th>
-                    <th className="px-6 py-4 font-semibold">Requested</th>
-                    <th className="px-6 py-4 font-semibold">Status</th>
-                    <th className="px-6 py-4 font-semibold">Action</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Employee</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Asset</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Requested</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Status</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {returnRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                      <td colSpan={5} className="px-4 py-12 text-center text-zinc-500 sm:px-6">
                         No asset return requests yet.
                       </td>
                     </tr>
                   ) : (
                     returnRequests.map((request) => (
                       <tr key={request.id} className="border-t border-zinc-200/70">
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <div className="font-semibold text-zinc-900">
                             {request.employee_name || request.employee_email}
                           </div>
                           <div className="mt-1 text-xs text-zinc-500">{request.employee_email}</div>
                         </td>
-                        <td className="px-6 py-4 text-zinc-700">
+                        <td className="px-4 py-3.5 text-zinc-700 sm:px-6 sm:py-4">
                           <div className="font-medium text-zinc-900">{request.asset_name}</div>
                           <div className="mt-1 text-xs text-zinc-500">
                             {request.asset_type || "-"} | Tag: {request.asset_tag || "-"} | SN:{" "}
                             {request.serial_number || "-"}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-zinc-700">
+                        <td className="px-4 py-3.5 text-zinc-700 sm:px-6 sm:py-4">
                           {request.requested_at ? formatDateTime(request.requested_at) : "-"}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <Badge
                             className={
                               request.status === "confirmed"
@@ -647,7 +647,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                             {labelize(request.status || "pending")}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           {request.status === "confirmed" ? (
                             <span className="text-xs text-zinc-500">
                               Confirmed {request.confirmed_at ? formatDateTime(request.confirmed_at) : ""}
@@ -655,7 +655,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                           ) : (
                             <button
                               onClick={() => confirmReturnRequest(request)}
-                              className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700"
+                              className="w-full rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 sm:w-auto"
                             >
                               Confirm Return
                             </button>
@@ -671,8 +671,8 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         ) : null}
 
         <section>
-          <div className="overflow-hidden rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-            <div className="flex items-center justify-between border-b border-zinc-200/70 px-6 py-5">
+          <div className="overflow-hidden rounded-[28px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:rounded-[32px]">
+            <div className="flex flex-col gap-3 border-b border-zinc-200/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-900">Workflow queue</h2>
                 <p className="mt-1 text-sm text-zinc-500">
@@ -681,12 +681,13 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
               </div>
               <button
                 onClick={fetchReports}
-                className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
+                className="w-full rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50 sm:w-auto"
               >
                 Refresh
               </button>
             </div>
-            <div className="flex flex-wrap gap-2 border-b border-zinc-200/70 px-6 py-4">
+            <div className="overflow-x-auto border-b border-zinc-200/70 px-4 py-4 sm:px-6">
+              <div className="flex min-w-max gap-2">
               <QuickChip
                 label="All"
                 active={quickFilter === "all"}
@@ -712,23 +713,24 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                 active={quickFilter === "my_queue"}
                 onClick={() => setQuickFilter("my_queue")}
               />
+              </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-[740px] text-sm">
                 <thead className="bg-zinc-50/80 text-left text-zinc-500">
                   <tr>
-                    <th className="px-6 py-4 font-semibold">Employee</th>
-                    <th className="px-6 py-4 font-semibold">Asset</th>
-                    <th className="px-6 py-4 font-semibold">Severity</th>
-                    <th className="px-6 py-4 font-semibold">Approval</th>
-                    <th className="px-6 py-4 font-semibold">Actions</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Employee</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Asset</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Severity</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Approval</th>
+                    <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredReports.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-14 text-center text-zinc-500">
+                      <td colSpan={5} className="px-4 py-14 text-center text-zinc-500 sm:px-6">
                         No reports match your current filters.
                       </td>
                     </tr>
@@ -742,24 +744,24 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                             : ""
                         }`}
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <div className="font-semibold text-zinc-900">{report.full_name}</div>
                           <div className="mt-1 text-xs text-zinc-500">
                             {report.employee_id} - {report.department}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <div className="font-medium text-zinc-800">{report.asset_type}</div>
                           <div className="mt-1 text-xs text-zinc-500">
                             {report.issue_category}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <Badge className={SEVERITY_STYLES[report.severity] || SEVERITY_STYLES.Low}>
                             {report.severity}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <div className="flex flex-col gap-2">
                             <Badge className={STATUS_STYLES[report.status || "submitted"] || STATUS_STYLES.submitted}>
                               {labelize(report.status || "submitted")}
@@ -774,7 +776,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                             </Badge>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <div className="flex flex-wrap gap-2">
                             <button
                               onClick={() => setSelectedReport(report)}
@@ -800,9 +802,9 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         </section>
 
         {selectedReport ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-8">
             <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[32px] border border-zinc-200/80 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200/70 bg-white/95 px-6 py-5 backdrop-blur-sm">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200/70 bg-white/95 px-4 py-4 backdrop-blur-sm sm:px-6 sm:py-5">
                 <div>
                   <h2 className="text-lg font-semibold text-zinc-900">Report details</h2>
                   <p className="mt-1 text-sm text-zinc-500">
@@ -817,7 +819,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                 </button>
               </div>
 
-              <div className="space-y-6 px-6 py-6">
+              <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-6">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-xl font-bold text-zinc-900">{selectedReport.full_name}</h3>
@@ -1051,13 +1053,13 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => viewAttachments(selectedReport.id)}
-                    className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700"
+                    className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 sm:w-auto"
                   >
                     Open attachments
                   </button>
                   <button
                     onClick={() => setSelectedReport(null)}
-                    className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
+                    className="w-full rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50 sm:w-auto"
                   >
                     Close details
                   </button>
@@ -1068,7 +1070,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
         ) : null}
 
         {confirmAction ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-6 backdrop-blur-sm sm:items-center sm:py-8">
             <div className="w-full max-w-md rounded-[28px] border border-zinc-200 bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
                 Confirmation
@@ -1268,7 +1270,7 @@ function Toast({ tone = "info", message }) {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-sm">
+    <div className="fixed bottom-4 left-4 right-4 z-50 sm:bottom-5 sm:left-auto sm:right-5 sm:max-w-sm">
       <div className={`rounded-2xl border px-4 py-3 text-sm shadow-lg ${toneMap[tone]}`}>
         {message}
       </div>

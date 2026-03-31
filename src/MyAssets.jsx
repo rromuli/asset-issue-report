@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
 
+const MAX_ORIGINAL_UPLOAD_BYTES = 8 * 1024 * 1024;
+const TARGET_UPLOAD_MAX_BYTES = 500 * 1024;
+
 const assetTypes = [
   "Laptop",
   "Phone",
@@ -179,13 +182,27 @@ export default function MyAssets({ session, onReportIssue }) {
     let photoPath = null;
 
     try {
+      if (!form.photo) {
+        setError("A condition photo is required for each asset.");
+        setSubmitting(false);
+        return;
+      }
+
+      if (form.photo.size > MAX_ORIGINAL_UPLOAD_BYTES) {
+        setError("Photo is too large. Please use an image up to 8 MB.");
+        setSubmitting(false);
+        return;
+      }
+
       if (form.photo) {
-        const fileName = `${Date.now()}-${form.photo.name}`;
+        const optimizedPhoto = await optimizePhotoForUpload(form.photo);
+        const cleanName = form.photo.name.replace(/\.[^/.]+$/, "");
+        const fileName = `${Date.now()}-${cleanName}.jpg`;
         const filePath = `${session.user.email}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("asset-photos")
-          .upload(filePath, form.photo);
+          .upload(filePath, optimizedPhoto);
 
         if (uploadError) {
           setError(uploadError.message);
@@ -400,11 +417,12 @@ export default function MyAssets({ session, onReportIssue }) {
                 />
               </Field>
 
-              <Field label="Current condition photo">
+              <Field label="Current condition photo" required>
                 <input
                   type="file"
                   accept=".png,.jpg,.jpeg,.webp"
                   onChange={(e) => updateField("photo", e.target.files?.[0] || null)}
+                  required
                   className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
                 />
               </Field>
@@ -573,6 +591,70 @@ export default function MyAssets({ session, onReportIssue }) {
       </div>
     </div>
   );
+}
+
+async function optimizePhotoForUpload(file) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files are allowed for asset photos.");
+  }
+
+  const image = await readImageFile(file);
+  const ratio = image.width > 1600 ? 1600 / image.width : 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.width * ratio));
+  canvas.height = Math.max(1, Math.round(image.height * ratio));
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Could not process image file.");
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  let quality = 0.82;
+  let blob = await canvasToBlob(canvas, "image/jpeg", quality);
+
+  while (blob.size > TARGET_UPLOAD_MAX_BYTES && quality > 0.52) {
+    quality -= 0.08;
+    blob = await canvasToBlob(canvas, "image/jpeg", quality);
+  }
+
+  return new File([blob], "asset-photo.jpg", {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+}
+
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Could not read image data."));
+      img.src = reader.result;
+    };
+
+    reader.onerror = () => reject(new Error("Could not open selected file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Image conversion failed."));
+          return;
+        }
+        resolve(blob);
+      },
+      type,
+      quality
+    );
+  });
 }
 
 function Field({ label, required = false, children }) {

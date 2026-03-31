@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MyAssets from "./MyAssets";
 import AssetIssueReportForm from "./AssetIssueReportForm";
 import AdminDashboard from "./AdminDashboard";
 import AdminLogin from "./AdminLogin";
 import AllReports from "./AllReports";
+import AllAssets from "./AllAssets";
 import EmployeeLogin from "./EmployeeLogin";
 import gjirafaLogo from "./assets/gjirafa-logo.svg";
 import { supabase } from "./supabaseClient";
@@ -21,6 +22,8 @@ export default function App() {
   const [adminRole, setAdminRole] = useState(null);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const adminMenuRef = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -28,6 +31,8 @@ export default function App() {
 
     if (requestedView === "admin") {
       setActiveTab("admin");
+    } else if (requestedView === "all_assets") {
+      setActiveTab("all_assets");
     } else if (requestedView === "all_reports") {
       setActiveTab("all_reports");
     } else if (requestedView === "issues") {
@@ -47,6 +52,18 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (!adminMenuRef.current) return;
+      if (!adminMenuRef.current.contains(event.target)) {
+        setAdminMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
   useEffect(() => {
@@ -94,12 +111,14 @@ export default function App() {
   function openAssetsTab() {
     setActiveTab("assets");
     setShowAdminLogin(false);
+    setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/");
   }
 
   function openIssuesTab() {
     setActiveTab("issues");
     setShowAdminLogin(false);
+    setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=issues");
   }
 
@@ -115,6 +134,7 @@ export default function App() {
     }
 
     setActiveTab("admin");
+    setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=admin");
   }
 
@@ -130,7 +150,24 @@ export default function App() {
     }
 
     setActiveTab("all_reports");
+    setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=all_reports");
+  }
+
+  function openAllAssetsTab() {
+    if (!session) {
+      setShowAdminLogin(true);
+      return;
+    }
+
+    if (!isAdmin) {
+      setActiveTab("assets");
+      return;
+    }
+
+    setActiveTab("all_assets");
+    setAdminMenuOpen(false);
+    window.history.replaceState({}, "", "/?view=all_assets");
   }
 
   async function handleLogout() {
@@ -140,6 +177,7 @@ export default function App() {
     setAdminRole(null);
     setSelectedAsset(null);
     setShowAdminLogin(false);
+    setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/");
   }
 
@@ -147,6 +185,7 @@ export default function App() {
     setSelectedAsset(asset);
     setActiveTab("issues");
     setShowAdminLogin(false);
+    setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=issues");
   }
 
@@ -189,6 +228,34 @@ export default function App() {
       }
 
       return <AllReports />;
+    }
+
+    if (activeTab === "all_assets") {
+      if (checkingAdmin) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              Checking admin access...
+            </div>
+          </div>
+        );
+      }
+
+      if (!isAdmin) {
+        return (
+          <div className="px-4 py-10 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+              <h2 className="text-lg font-semibold">Access denied</h2>
+              <p className="mt-2 text-sm leading-7">
+                Your account is signed in, but it does not currently have permission to
+                access all employee assets.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      return <AllAssets />;
     }
 
     if (activeTab === "admin") {
@@ -271,29 +338,53 @@ export default function App() {
                     </button>
 
                     {isAdmin ? (
-                      <button
-                        onClick={openAllReportsTab}
-                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                          activeTab === "all_reports"
-                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
-                            : "text-zinc-700 hover:bg-white/80"
-                        }`}
-                      >
-                        All Reports
-                      </button>
-                    ) : null}
+                      <div className="relative" ref={adminMenuRef}>
+                        <button
+                          onClick={() => setAdminMenuOpen((open) => !open)}
+                          className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                            ["all_assets", "all_reports", "admin"].includes(activeTab)
+                              ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                              : "text-zinc-700 hover:bg-white/80"
+                          }`}
+                        >
+                          Admin
+                        </button>
 
-                    {isAdmin ? (
-                      <button
-                        onClick={openAdminTab}
-                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                          activeTab === "admin"
-                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
-                            : "text-zinc-700 hover:bg-white/80"
-                        }`}
-                      >
-                        Admin Dashboard
-                      </button>
+                        {adminMenuOpen ? (
+                          <div className="absolute left-0 top-[calc(100%+8px)] z-50 w-52 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]">
+                            <button
+                              onClick={openAllAssetsTab}
+                              className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                                activeTab === "all_assets"
+                                  ? "bg-zinc-100 text-zinc-900"
+                                  : "text-zinc-700 hover:bg-zinc-50"
+                              }`}
+                            >
+                              All Assets
+                            </button>
+                            <button
+                              onClick={openAllReportsTab}
+                              className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                                activeTab === "all_reports"
+                                  ? "bg-zinc-100 text-zinc-900"
+                                  : "text-zinc-700 hover:bg-zinc-50"
+                              }`}
+                            >
+                              All Reports
+                            </button>
+                            <button
+                              onClick={openAdminTab}
+                              className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                                activeTab === "admin"
+                                  ? "bg-zinc-100 text-zinc-900"
+                                  : "text-zinc-700 hover:bg-zinc-50"
+                              }`}
+                            >
+                              Admin Dashboard
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 
 export default function AllAssets() {
@@ -6,12 +6,17 @@ export default function AllAssets() {
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
   const [activePhoto, setActivePhoto] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanPayload, setScanPayload] = useState(null);
   const [scanMatch, setScanMatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanTimerRef = useRef(null);
+  const scanBusyRef = useRef(false);
 
   useEffect(() => {
     fetchAssets();
@@ -160,6 +165,88 @@ export default function AllAssets() {
       setScanError("");
     }
   }
+
+  function stopCameraScan() {
+    if (scanTimerRef.current) {
+      clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  }
+
+  async function startCameraScan() {
+    setScanError("");
+    if (!("BarcodeDetector" in window)) {
+      setScanError("Live camera QR scanning is not supported in this browser.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScanError("Camera access is not available in this browser.");
+      return;
+    }
+
+    try {
+      stopCameraScan();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      streamRef.current = stream;
+
+      if (!videoRef.current) {
+        setScanError("Video preview not ready.");
+        stopCameraScan();
+        return;
+      }
+
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setCameraActive(true);
+
+      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      scanTimerRef.current = window.setInterval(async () => {
+        if (!videoRef.current || scanBusyRef.current) return;
+        scanBusyRef.current = true;
+        try {
+          const results = await detector.detect(videoRef.current);
+          if (results?.length && results[0]?.rawValue) {
+            applyScanValue(results[0].rawValue);
+            stopCameraScan();
+          }
+        } catch {
+          // keep scanner running; transient frame errors are expected
+        } finally {
+          scanBusyRef.current = false;
+        }
+      }, 450);
+    } catch (cameraErr) {
+      setScanError("Camera access failed: " + cameraErr.message);
+      stopCameraScan();
+    }
+  }
+
+  function closeScanner() {
+    stopCameraScan();
+    setScannerOpen(false);
+  }
+
+  useEffect(() => {
+    if (!scannerOpen) {
+      stopCameraScan();
+    }
+    return () => {
+      stopCameraScan();
+    };
+  }, [scannerOpen]);
 
   const filteredAssets = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -346,7 +433,7 @@ export default function AllAssets() {
       {scannerOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
-          onClick={() => setScannerOpen(false)}
+          onClick={closeScanner}
         >
           <div
             className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_20px_50px_rgba(0,0,0,0.2)]"
@@ -356,7 +443,7 @@ export default function AllAssets() {
               <h3 className="text-lg font-semibold text-zinc-900">Scan Asset QR</h3>
               <button
                 type="button"
-                onClick={() => setScannerOpen(false)}
+                onClick={closeScanner}
                 className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
               >
                 Close
@@ -364,8 +451,43 @@ export default function AllAssets() {
             </div>
 
             <p className="mt-2 text-sm text-zinc-600">
-              Upload a QR image or paste scanned QR text to find the matching asset.
+              Use camera scan, upload a QR image, or paste scanned QR text to find the matching asset.
             </p>
+
+            <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={startCameraScan}
+                  className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Use Camera
+                </button>
+                {cameraActive ? (
+                  <button
+                    type="button"
+                    onClick={stopCameraScan}
+                    className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    Stop Camera
+                  </button>
+                ) : null}
+              </div>
+              <div className="mt-3 overflow-hidden rounded-xl border border-zinc-200 bg-black">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="h-44 w-full object-cover"
+                />
+              </div>
+              <p className="mt-2 text-xs text-zinc-600">
+                {cameraActive
+                  ? "Camera is active. Point it at the QR code."
+                  : "Tap Use Camera to scan directly from your phone camera."}
+              </p>
+            </div>
 
             <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
               <label className="block text-sm font-medium text-zinc-700">

@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 
 export default function AssetIssueReportForm({ selectedAsset = null, session = null }) {
+  const sessionFullName =
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.user_metadata?.name ||
+    session?.user?.email ||
+    "";
+
   const departments = [
     "IT",
     "HR",
@@ -71,12 +77,21 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
 
     setForm((prev) => ({
       ...prev,
+      fullName: prev.fullName || selectedAsset.employee_name || sessionFullName,
       assetType: selectedAsset.asset_type || prev.assetType,
       serialNumber: selectedAsset.serial_number || prev.serialNumber,
       assetTag: selectedAsset.asset_tag || prev.assetTag,
       makeModel: selectedAsset.make_model || prev.makeModel,
     }));
-  }, [selectedAsset]);
+  }, [selectedAsset, sessionFullName]);
+
+  useEffect(() => {
+    if (!sessionFullName) return;
+    setForm((prev) => ({
+      ...prev,
+      fullName: prev.fullName || sessionFullName,
+    }));
+  }, [sessionFullName]);
 
   const requiredFields = {
     fullName: "Full name",
@@ -224,6 +239,7 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
 
       setForm({
         ...initialForm,
+        fullName: sessionFullName,
         assetType: selectedAsset?.asset_type || "",
         serialNumber: selectedAsset?.serial_number || "",
         assetTag: selectedAsset?.asset_tag || "",
@@ -240,6 +256,7 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
   function handleReset() {
     setForm({
       ...initialForm,
+      fullName: sessionFullName,
       assetType: selectedAsset?.asset_type || "",
       serialNumber: selectedAsset?.serial_number || "",
       assetTag: selectedAsset?.asset_tag || "",

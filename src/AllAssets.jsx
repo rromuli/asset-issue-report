@@ -4,6 +4,11 @@ import { supabase } from "./supabaseClient";
 export default function AllAssets() {
   const [assets, setAssets] = useState([]);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
+  const [activePhoto, setActivePhoto] = useState(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scanPayload, setScanPayload] = useState(null);
+  const [scanMatch, setScanMatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -88,20 +93,71 @@ export default function AllAssets() {
     setPhotoPreviewUrls(Object.fromEntries(urlEntries.filter(([, url]) => !!url)));
   }
 
-  async function openPhoto(path) {
-    if (!path) return;
+  async function openPhoto(path, fallbackUrl, label) {
+    if (!path && !fallbackUrl) return;
 
-    const { data, error } = await supabase.storage
-      .from("asset-photos")
-      .createSignedUrl(path, 60);
+    if (path) {
+      const { data, error } = await supabase.storage
+        .from("asset-photos")
+        .createSignedUrl(path, 300);
 
-    if (error) {
-      setError("Could not open photo: " + error.message);
+      if (!error && data?.signedUrl) {
+        setActivePhoto({ url: data.signedUrl, label });
+        return;
+      }
+    }
+
+    if (fallbackUrl) {
+      setActivePhoto({ url: fallbackUrl, label });
       return;
     }
 
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank");
+    setError("Could not open photo.");
+  }
+
+  async function handleQrImageSelected(file) {
+    if (!file) return;
+    setScanError("");
+    setScanPayload(null);
+    setScanMatch(null);
+
+    if (!("BarcodeDetector" in window)) {
+      setScanError("QR scanning is not supported in this browser. Paste scanned QR text instead.");
+      return;
+    }
+
+    try {
+      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      const bitmap = await createImageBitmap(file);
+      const results = await detector.detect(bitmap);
+
+      if (!results?.length || !results[0]?.rawValue) {
+        setScanError("No QR code detected in the image.");
+        return;
+      }
+
+      applyScanValue(results[0].rawValue);
+    } catch (scanErr) {
+      setScanError("Could not scan QR: " + scanErr.message);
+    }
+  }
+
+  function applyScanValue(rawValue) {
+    const parsed = parseQrPayload(rawValue);
+    if (!parsed) {
+      setScanError("Scanned code is not a valid asset QR payload.");
+      setScanPayload(null);
+      setScanMatch(null);
+      return;
+    }
+
+    setScanPayload(parsed);
+    const match = findMatchingAsset(parsed, assets);
+    setScanMatch(match || null);
+    if (!match) {
+      setScanError("Scanned QR is valid, but no matching active asset was found.");
+    } else {
+      setScanError("");
     }
   }
 
@@ -167,6 +223,20 @@ export default function AllAssets() {
               className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:w-80"
             />
           </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => {
+                setScannerOpen(true);
+                setScanError("");
+                setScanPayload(null);
+                setScanMatch(null);
+              }}
+              className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            >
+              Scan Asset QR
+            </button>
+          </div>
         </section>
 
         <section className="overflow-hidden rounded-[24px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
@@ -207,7 +277,13 @@ export default function AllAssets() {
                         {photoPreviewUrls[asset.id] ? (
                           <button
                             type="button"
-                            onClick={() => openPhoto(asset.condition_photo_path)}
+                            onClick={() =>
+                              openPhoto(
+                                asset.condition_photo_path,
+                                photoPreviewUrls[asset.id],
+                                `${asset.asset_name} - ${asset.employee_name || asset.employee_email}`
+                              )
+                            }
                             className="block h-12 w-16 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100"
                           >
                             <img
@@ -238,6 +314,154 @@ export default function AllAssets() {
           </div>
         </section>
       </div>
+
+      {activePhoto ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+          onClick={() => setActivePhoto(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-3 shadow-[0_20px_50px_rgba(0,0,0,0.2)] sm:p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-zinc-800">{activePhoto.label}</p>
+              <button
+                type="button"
+                onClick={() => setActivePhoto(null)}
+                className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                Close
+              </button>
+            </div>
+            <img
+              src={activePhoto.url}
+              alt={activePhoto.label}
+              className="max-h-[70vh] w-full rounded-xl object-contain"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {scannerOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+          onClick={() => setScannerOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_20px_50px_rgba(0,0,0,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-900">Scan Asset QR</h3>
+              <button
+                type="button"
+                onClick={() => setScannerOpen(false)}
+                className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <p className="mt-2 text-sm text-zinc-600">
+              Upload a QR image or paste scanned QR text to find the matching asset.
+            </p>
+
+            <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <label className="block text-sm font-medium text-zinc-700">
+                QR image
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => handleQrImageSelected(e.target.files?.[0] || null)}
+                  className="mt-2 block w-full text-sm text-zinc-700 file:mr-3 file:rounded-xl file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
+                />
+              </label>
+            </div>
+
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-zinc-700">
+                Paste QR payload
+                <textarea
+                  rows={3}
+                  onBlur={(e) => {
+                    if (e.target.value.trim()) applyScanValue(e.target.value.trim());
+                  }}
+                  placeholder='{"employee_name":"...","serial_number":"...","asset_type":"..."}'
+                  className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+              </label>
+            </div>
+
+            {scanError ? (
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {scanError}
+              </div>
+            ) : null}
+
+            {scanPayload ? (
+              <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm">
+                <p className="font-semibold text-zinc-900">Scanned QR</p>
+                <p className="mt-1 text-zinc-700">
+                  {scanPayload.employee_name || "-"} | {scanPayload.serial_number || "-"} |{" "}
+                  {scanPayload.asset_type || "-"}
+                </p>
+              </div>
+            ) : null}
+
+            {scanMatch ? (
+              <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                <p className="font-semibold text-emerald-900">Matching asset found</p>
+                <p className="mt-1 text-emerald-800">
+                  {scanMatch.asset_name || "-"} | SN: {scanMatch.serial_number || "-"} |{" "}
+                  {scanMatch.employee_name || scanMatch.employee_email || "-"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm(scanMatch.serial_number || scanMatch.asset_name || "");
+                    setScannerOpen(false);
+                  }}
+                  className="mt-2 rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                >
+                  Show in table
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function parseQrPayload(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed.serial_number || !parsed.asset_type) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function findMatchingAsset(payload, assets) {
+  const serial = String(payload.serial_number || "").trim().toLowerCase();
+  const type = String(payload.asset_type || "").trim().toLowerCase();
+  const employee = String(payload.employee_name || "").trim().toLowerCase();
+
+  return (
+    assets.find((asset) => {
+      const serialMatch = String(asset.serial_number || "").trim().toLowerCase() === serial;
+      const typeMatch = String(asset.asset_type || "").trim().toLowerCase() === type;
+      if (!serialMatch || !typeMatch) return false;
+
+      if (!employee) return true;
+      const name = String(asset.employee_name || "").trim().toLowerCase();
+      const email = String(asset.employee_email || "").trim().toLowerCase();
+      return name === employee || email === employee;
+    }) || null
   );
 }

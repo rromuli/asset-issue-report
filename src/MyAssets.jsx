@@ -14,6 +14,16 @@ const assetTypes = [
   "Other",
 ];
 
+const TAG_PREFIX_BY_TYPE = {
+  Laptop: "IT-LAP",
+  Phone: "IT-PHN",
+  Monitor: "IT-MON",
+  Keyboard: "IT-KBD",
+  Mouse: "IT-MSE",
+  Accessory: "IT-ACC",
+  Other: "IT-DEV",
+};
+
 const previewAssets = [
   {
     id: 101,
@@ -43,6 +53,8 @@ export default function MyAssets({ session, onReportIssue }) {
   const [assets, setAssets] = useState([]);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
   const [returnStatusByAssetId, setReturnStatusByAssetId] = useState({});
+  const [activePhoto, setActivePhoto] = useState(null);
+  const [tagAsset, setTagAsset] = useState(null);
   const [loading, setLoading] = useState(!!session);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -80,7 +92,7 @@ export default function MyAssets({ session, onReportIssue }) {
     const { data, error } = await supabase
       .from("employee_assets")
       .select(
-        "id, asset_name, asset_type, serial_number, asset_tag, make_model, assigned_at, condition_notes, condition_photo_path"
+        "id, employee_name, asset_name, asset_type, serial_number, asset_tag, make_model, assigned_at, condition_notes, condition_photo_path"
       )
       .order("created_at", { ascending: false });
 
@@ -194,6 +206,9 @@ export default function MyAssets({ session, onReportIssue }) {
         return;
       }
 
+      const assetTagValue =
+        form.assetTag?.trim() || generateItTag(form.assetType || "Other");
+
       if (form.photo) {
         const optimizedPhoto = await optimizePhotoForUpload(form.photo);
         const cleanName = form.photo.name.replace(/\.[^/.]+$/, "");
@@ -221,7 +236,7 @@ export default function MyAssets({ session, onReportIssue }) {
           asset_name: form.assetName,
           asset_type: form.assetType,
           serial_number: form.serialNumber || null,
-          asset_tag: form.assetTag || null,
+          asset_tag: assetTagValue || null,
           make_model: form.makeModel || null,
           condition_notes: form.conditionNotes || null,
           condition_photo_path: photoPath,
@@ -245,6 +260,7 @@ export default function MyAssets({ session, onReportIssue }) {
       });
 
       setShowForm(false);
+      showToast(`Asset saved. IT Tag: ${assetTagValue}`, "success");
       fetchAssets();
     } catch (err) {
       console.error(err);
@@ -267,7 +283,7 @@ export default function MyAssets({ session, onReportIssue }) {
     }
 
     if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank");
+      setActivePhoto({ url: data.signedUrl });
     }
   }
 
@@ -320,6 +336,84 @@ export default function MyAssets({ session, onReportIssue }) {
     if (emailError) {
       console.error("Return request email error:", emailError.message);
     }
+  }
+
+  function buildQrValue(asset) {
+    const payload = {
+      employee_name:
+        asset.employee_name ||
+        session?.user?.user_metadata?.full_name ||
+        session?.user?.email ||
+        "-",
+      serial_number: asset.serial_number || "-",
+      asset_type: asset.asset_type || "-",
+      it_tag: asset.asset_tag || "-",
+    };
+    return JSON.stringify(payload);
+  }
+
+  function buildQrSrc(asset) {
+    const encoded = encodeURIComponent(buildQrValue(asset));
+    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encoded}`;
+  }
+
+  function printIdTag(asset) {
+    const qrSrc = buildQrSrc(asset);
+    const popup = window.open("", "_blank", "width=420,height=620");
+    if (!popup) {
+      showToast("Pop-up blocked. Please allow pop-ups to print the tag.", "warning");
+      return;
+    }
+
+    popup.document.write(`
+      <html>
+        <head>
+          <title>Asset ID Tag</title>
+          <style>
+            @page { size: 2in 1in; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body { width: 2in; height: 1in; margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; color: #111827; }
+            .tag {
+              width: 2in;
+              height: 1in;
+              border: 1px solid #111827;
+              border-radius: 0.06in;
+              padding: 0.05in;
+              display: grid;
+              grid-template-columns: 0.8in 1fr;
+              gap: 0.05in;
+              align-items: center;
+            }
+            .qr img { width: 0.7in; height: 0.7in; display: block; margin: 0 auto; }
+            .title { font-size: 7px; letter-spacing: .04em; text-transform: uppercase; color: #374151; line-height: 1.1; }
+            .name { margin-top: 0.02in; font-size: 8px; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .meta { margin-top: 0.03in; font-size: 7px; line-height: 1.2; }
+            .meta div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          </style>
+        </head>
+        <body>
+          <div class="tag">
+            <div class="qr">
+              <img src="${qrSrc}" alt="Asset QR code" />
+            </div>
+            <div>
+              <div class="title">Asset Management System</div>
+              <div class="name">${escapeHtml(asset.asset_name || "Asset")}</div>
+              <div class="meta">
+                <div><strong>ID:</strong> ${escapeHtml(String(asset.id))}</div>
+                <div><strong>Type:</strong> ${escapeHtml(asset.asset_type || "-")}</div>
+                <div><strong>SN:</strong> ${escapeHtml(asset.serial_number || "-")}</div>
+              </div>
+            </div>
+          </div>
+          <script>
+            window.onload = () => { window.print(); };
+          </script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
   }
 
   return (
@@ -565,6 +659,13 @@ export default function MyAssets({ session, onReportIssue }) {
                     </button>
 
                     <button
+                      onClick={() => setTagAsset(asset)}
+                      className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50"
+                    >
+                      ID Tag
+                    </button>
+
+                    <button
                       onClick={() => requestReturnConfirmation(asset)}
                       disabled={returnStatusByAssetId[asset.id] === "pending"}
                       className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
@@ -588,9 +689,96 @@ export default function MyAssets({ session, onReportIssue }) {
           )}
         </section>
         {toast ? <InlineToast tone={toast.tone} message={toast.message} /> : null}
+
+        {activePhoto ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+            onClick={() => setActivePhoto(null)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-3 shadow-[0_20px_50px_rgba(0,0,0,0.2)] sm:p-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setActivePhoto(null)}
+                  className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+                >
+                  Close
+                </button>
+              </div>
+              <img
+                src={activePhoto.url}
+                alt="Asset condition"
+                className="max-h-[70vh] w-full rounded-xl object-contain"
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {tagAsset ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+            onClick={() => setTagAsset(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_20px_50px_rgba(0,0,0,0.2)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                Printable Asset Tag
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-zinc-900">{tagAsset.asset_name}</h3>
+              <p className="mt-1 text-sm text-zinc-600">
+                ID #{tagAsset.id} | {tagAsset.asset_type || "-"}
+              </p>
+
+              <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <img
+                  src={buildQrSrc(tagAsset)}
+                  alt="Asset QR code"
+                  className="mx-auto h-48 w-48 rounded-lg bg-white p-2"
+                />
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => printIdTag(tagAsset)}
+                  className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Print Tag
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTagAsset(null)}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function generateItTag(assetType) {
+  const prefix = TAG_PREFIX_BY_TYPE[assetType] || TAG_PREFIX_BY_TYPE.Other;
+  const randomPart = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix}-${randomPart}`;
 }
 
 async function optimizePhotoForUpload(file) {

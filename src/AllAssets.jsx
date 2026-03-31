@@ -3,6 +3,7 @@ import { supabase } from "./supabaseClient";
 
 export default function AllAssets() {
   const [assets, setAssets] = useState([]);
+  const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -15,21 +16,93 @@ export default function AllAssets() {
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase
-      .from("employee_assets")
-      .select(
-        "id, employee_name, employee_email, asset_name, asset_type, serial_number, asset_tag, make_model, assigned_at, created_at"
-      )
-      .order("created_at", { ascending: false });
+    const [
+      { data: assetRows, error: assetsError },
+      { data: returnRows, error: returnsError },
+    ] = await Promise.all([
+      supabase
+        .from("employee_assets")
+        .select(
+          "id, employee_name, employee_email, asset_name, asset_type, serial_number, asset_tag, make_model, assigned_at, condition_photo_path, created_at"
+        )
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("asset_return_requests")
+        .select("asset_id, status, requested_at")
+        .order("requested_at", { ascending: false }),
+    ]);
 
-    if (error) {
-      setError(error.message);
+    if (assetsError) {
+      setError(assetsError.message);
       setLoading(false);
       return;
     }
 
-    setAssets(data || []);
+    const nextAssets = assetRows || [];
+
+    if (returnsError) {
+      // Keep page functional even in environments where return-requests table is unavailable.
+      console.error("asset_return_requests load error:", returnsError.message);
+      setAssets(nextAssets);
+      setLoading(false);
+      return;
+    }
+
+    const latestStatusByAssetId = {};
+    for (const row of returnRows || []) {
+      if (!latestStatusByAssetId[row.asset_id]) {
+        latestStatusByAssetId[row.asset_id] = row.status || "pending";
+      }
+    }
+
+    const visibleAssets = nextAssets.filter(
+      (asset) => latestStatusByAssetId[asset.id] !== "confirmed"
+    );
+
+    setAssets(visibleAssets);
+    await loadPhotoPreviews(visibleAssets);
     setLoading(false);
+  }
+
+  async function loadPhotoPreviews(assetRows) {
+    const rowsWithPhotos = assetRows.filter((row) => row.condition_photo_path);
+    if (rowsWithPhotos.length === 0) {
+      setPhotoPreviewUrls({});
+      return;
+    }
+
+    const urlEntries = await Promise.all(
+      rowsWithPhotos.map(async (row) => {
+        const { data, error } = await supabase.storage
+          .from("asset-photos")
+          .createSignedUrl(row.condition_photo_path, 3600);
+
+        if (error || !data?.signedUrl) {
+          return [row.id, null];
+        }
+
+        return [row.id, data.signedUrl];
+      })
+    );
+
+    setPhotoPreviewUrls(Object.fromEntries(urlEntries.filter(([, url]) => !!url)));
+  }
+
+  async function openPhoto(path) {
+    if (!path) return;
+
+    const { data, error } = await supabase.storage
+      .from("asset-photos")
+      .createSignedUrl(path, 60);
+
+    if (error) {
+      setError("Could not open photo: " + error.message);
+      return;
+    }
+
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    }
   }
 
   const filteredAssets = useMemo(() => {
@@ -98,11 +171,12 @@ export default function AllAssets() {
 
         <section className="overflow-hidden rounded-[24px] border border-zinc-200/80 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
           <div className="overflow-x-auto">
-            <table className="min-w-[860px] text-sm">
+            <table className="w-full text-sm">
               <thead className="bg-zinc-50/80 text-left text-zinc-500">
                 <tr>
                   <th className="px-5 py-3 font-semibold">Employee</th>
                   <th className="px-5 py-3 font-semibold">Asset</th>
+                  <th className="px-5 py-3 font-semibold">Photo</th>
                   <th className="px-5 py-3 font-semibold">Type</th>
                   <th className="px-5 py-3 font-semibold">Serial</th>
                   <th className="px-5 py-3 font-semibold">Tag</th>
@@ -113,7 +187,7 @@ export default function AllAssets() {
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-zinc-500">
+                    <td colSpan={8} className="px-5 py-10 text-center text-zinc-500">
                       No assets found.
                     </td>
                   </tr>
@@ -129,6 +203,24 @@ export default function AllAssets() {
                         </div>
                       </td>
                       <td className="px-5 py-3 text-zinc-700">{asset.asset_name || "-"}</td>
+                      <td className="px-5 py-3">
+                        {photoPreviewUrls[asset.id] ? (
+                          <button
+                            type="button"
+                            onClick={() => openPhoto(asset.condition_photo_path)}
+                            className="block h-12 w-16 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100"
+                          >
+                            <img
+                              src={photoPreviewUrls[asset.id]}
+                              alt={`${asset.asset_name} condition`}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </button>
+                        ) : (
+                          <span className="text-xs text-zinc-500">No photo</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-zinc-700">{asset.asset_type || "-"}</td>
                       <td className="px-5 py-3 text-zinc-700">{asset.serial_number || "-"}</td>
                       <td className="px-5 py-3 text-zinc-700">{asset.asset_tag || "-"}</td>

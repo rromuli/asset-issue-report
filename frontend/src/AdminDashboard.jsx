@@ -600,7 +600,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-[720px] text-sm">
+              <table className="min-w-[720px] w-full text-sm">
                 <thead className="bg-zinc-50/80 text-left text-zinc-500">
                   <tr>
                     <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Employee</th>
@@ -717,7 +717,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-[740px] text-sm">
+              <table className="min-w-[740px] w-full text-sm">
                 <thead className="bg-zinc-50/80 text-left text-zinc-500">
                   <tr>
                     <th className="px-4 py-3.5 font-semibold sm:px-6 sm:py-4">Employee</th>

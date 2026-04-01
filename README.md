@@ -1,16 +1,63 @@
-# React + Vite
+# Asset Management System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repo is now split into two deployable apps:
 
-Currently, two official plugins are available:
+- `frontend/` React + Vite UI
+- `backend/` Express OIDC auth/session API
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Local Development
 
-## React Compiler
+1. Install frontend deps:
+`npm run install:frontend`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+2. Install backend deps:
+`npm run install:backend`
 
-## Expanding the ESLint configuration
+3. Run backend:
+`npm run dev:backend`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+4. Run frontend:
+`npm run dev:frontend`
+
+## Environment Files
+
+Frontend:
+- Copy `frontend/.env.example` to `frontend/.env`
+- Set at least `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+- Optional: `VITE_API_BASE_URL` (leave empty for same-origin/proxy, set full backend URL for separate domains)
+
+Backend:
+- Copy `backend/.env.example` to `backend/.env`
+- Set OIDC, DB, and session values
+- For split-domain hosting, set:
+  - `FRONTEND_ORIGINS=https://your-frontend-domain`
+  - `SESSION_SAME_SITE=none`
+  - `SESSION_SECURE=true`
+
+## Build
+
+Frontend production build:
+`npm run build:frontend`
+
+## Docker Deploy (Frontend + Backend)
+
+This repo includes:
+- `frontend/Dockerfile` (Vite build + Nginx)
+- `backend/Dockerfile` (Node API)
+- `docker-compose.yml`
+
+Run with Docker Compose:
+
+1. Configure backend env:
+- copy `backend/.env.example` to `backend/.env`
+- set real OIDC + DB values
+
+2. Build and run:
+`docker compose up -d --build`
+
+3. Open app:
+`http://localhost:3000`
+
+Notes:
+- Frontend container proxies `/api`, `/cb`, and `/logout` to backend container.
+- Keep `VITE_API_BASE_URL` empty when using this compose setup.

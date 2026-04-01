@@ -10,14 +10,13 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
 
   const departments = [
     "IT",
+    "Tech",
     "HR",
     "Finance",
     "Operations",
-    "Sales",
     "Marketing",
     "Customer Support",
-    "Legal",
-    "Procurement",
+    "Warehouse",
     "Other",
   ];
 

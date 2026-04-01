@@ -55,6 +55,7 @@ export default function MyAssets({ session, onReportIssue }) {
   const [returnStatusByAssetId, setReturnStatusByAssetId] = useState({});
   const [activePhoto, setActivePhoto] = useState(null);
   const [tagAsset, setTagAsset] = useState(null);
+  const [confirmReturnAsset, setConfirmReturnAsset] = useState(null);
   const [loading, setLoading] = useState(!!session);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -666,7 +667,7 @@ export default function MyAssets({ session, onReportIssue }) {
                     </button>
 
                     <button
-                      onClick={() => requestReturnConfirmation(asset)}
+                      onClick={() => setConfirmReturnAsset(asset)}
                       disabled={returnStatusByAssetId[asset.id] === "pending"}
                       className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
                         returnStatusByAssetId[asset.id] === "pending"
@@ -756,6 +757,55 @@ export default function MyAssets({ session, onReportIssue }) {
                   className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {confirmReturnAsset ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+            onClick={() => setConfirmReturnAsset(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_20px_50px_rgba(0,0,0,0.2)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                Confirm Return Request
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-zinc-900">
+                Submit return confirmation?
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-700">
+                This will notify HR that you returned
+                {" "}
+                <span className="font-semibold">{confirmReturnAsset.asset_name}</span>
+                {" "}
+                and ask them to confirm it in the admin dashboard.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const asset = confirmReturnAsset;
+                    setConfirmReturnAsset(null);
+                    if (asset) {
+                      await requestReturnConfirmation(asset);
+                    }
+                  }}
+                  className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Yes, Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReturnAsset(null)}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Cancel
                 </button>
               </div>
             </div>

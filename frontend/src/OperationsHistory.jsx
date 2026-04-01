@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
+import { jsPDF } from "jspdf";
+import gjirafaLogo from "./assets/gjirafa-logo.svg";
 
 export default function OperationsHistory() {
   const [logs, setLogs] = useState([]);
@@ -164,7 +166,7 @@ export default function OperationsHistory() {
               <h2 className="mt-1 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
                 Unified Activity Logs
               </h2>
-              <p className="mt-1 text-sm text-zinc-600">
+              <p className="mt-1 text-sm leading-relaxed text-zinc-600">
                 Issue reports and asset returns combined in one timeline.
               </p>
             </div>
@@ -179,7 +181,7 @@ export default function OperationsHistory() {
 
         <section className="rounded-[20px] border border-zinc-200/80 bg-white p-3.5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-4">
           <div className="mb-2.5 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-zinc-900">All Logs</h3>
+            <h3 className="text-base font-semibold tracking-tight text-zinc-900">All Logs</h3>
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
               {filteredLogs.length}
             </span>
@@ -201,7 +203,9 @@ export default function OperationsHistory() {
                       className="w-full p-3 text-left transition hover:bg-zinc-100/70"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-semibold text-zinc-900">{log.title}</p>
+                        <p className="text-sm font-semibold tracking-tight text-zinc-900 sm:text-[15px]">
+                          {log.title}
+                        </p>
                         <div className="flex items-center gap-2">
                           <Badge tone={log.kind === "issue" ? "blue" : "amber"}>
                             {log.kind === "issue" ? "Issue" : "Return"}
@@ -215,7 +219,9 @@ export default function OperationsHistory() {
                           <span className="text-xs text-zinc-500">{isOpen ? "Hide" : "Details"}</span>
                         </div>
                       </div>
-                      <p className="mt-1 text-xs text-zinc-700 sm:text-sm">{log.subtitle}</p>
+                      <p className="mt-1 text-xs font-medium leading-relaxed text-zinc-700 sm:text-sm">
+                        {log.subtitle}
+                      </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         Latest activity: {formatDate(log.timestamp)}
                       </p>
@@ -228,9 +234,9 @@ export default function OperationsHistory() {
                     >
                       <div className="overflow-hidden">
                         {log.kind === "issue" ? (
-                          <IssueDetails details={log.details} />
+                          <IssueDetails details={log.details} log={log} />
                         ) : (
-                          <ReturnDetails details={log.details} />
+                          <ReturnDetails details={log.details} log={log} />
                         )}
                       </div>
                     </div>
@@ -245,16 +251,16 @@ export default function OperationsHistory() {
   );
 }
 
-function IssueDetails({ details }) {
+function IssueDetails({ details, log }) {
   return (
     <div className="px-3 pb-3 pt-2">
-      <div className="grid grid-cols-1 gap-1 text-xs text-zinc-600 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-1 text-xs leading-relaxed text-zinc-600 sm:grid-cols-2">
         <p>Submitted: {formatDate(details.submitted)}</p>
         <p>Sent for approval: {formatDate(details.sentForApproval)}</p>
         <p>Approved at: {formatDate(details.approvedAt)}</p>
         <p>Approved by: {details.approvedBy || "-"}</p>
       </div>
-      <div className="mt-2 rounded-xl bg-white p-2.5 text-xs text-zinc-700">
+      <div className="mt-2 rounded-xl bg-white p-2.5 text-xs leading-relaxed text-zinc-700">
         <p>
           <span className="font-semibold">Technical assessment:</span>{" "}
           {details.technicalAssessment || "Not provided"}
@@ -270,25 +276,237 @@ function IssueDetails({ details }) {
           {details.replacementRequired ? "Yes" : "No"}
         </p>
       </div>
+      <button
+        type="button"
+        onClick={() => void generateLogPdf(log)}
+        className="mt-2 rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+      >
+        Generate PDF
+      </button>
     </div>
   );
 }
 
-function ReturnDetails({ details }) {
+function ReturnDetails({ details, log }) {
   return (
     <div className="px-3 pb-3 pt-2">
-      <div className="grid grid-cols-1 gap-1 text-xs text-zinc-600 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-1 text-xs leading-relaxed text-zinc-600 sm:grid-cols-2">
         <p>Requested: {formatDate(details.requestedAt)}</p>
         <p>Confirmed: {formatDate(details.confirmedAt)}</p>
         <p>Confirmed by: {details.confirmedBy || "-"}</p>
         <p>Employee: {details.employeeEmail || "-"}</p>
         <p>Serial number: {details.serialNumber || "-"}</p>
       </div>
-      <div className="mt-2 rounded-xl bg-white p-2.5 text-xs text-zinc-700">
+      <div className="mt-2 rounded-xl bg-white p-2.5 text-xs leading-relaxed text-zinc-700">
         <span className="font-semibold">Notes:</span> {details.notes || "Not provided"}
       </div>
+      <button
+        type="button"
+        onClick={() => void generateLogPdf(log)}
+        className="mt-2 rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+      >
+        Generate PDF
+      </button>
     </div>
   );
+}
+
+async function generateLogPdf(log) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const sectionX = 14;
+  const sectionW = pageWidth - 28;
+  let y = 16;
+
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(10, 8, pageWidth - 20, 26, 3, 3, "F");
+
+  const logoDataUrl = await svgToPngDataUrl(gjirafaLogo);
+  if (logoDataUrl) {
+    doc.addImage(logoDataUrl, "PNG", 14, 12, 34, 12);
+  } else {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Gjirafa", 14, 20);
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("Asset Management System", 52, 17);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(75, 85, 99);
+  doc.text("Activity Log Export", 52, 23);
+  doc.text(`Generated: ${formatDate(new Date().toISOString())}`, 52, 28);
+  doc.setTextColor(17, 24, 39);
+
+  y = 40;
+
+  y = drawSection(
+    doc,
+    "Summary",
+    [
+      ["Type", log.kind === "issue" ? "Issue Report" : "Asset Return"],
+      ["Title", log.title],
+      ["Summary", log.subtitle],
+      ["Status", labelize(log.status)],
+      ...(log.approvalStatus ? [["Approval", labelize(log.approvalStatus)]] : []),
+      ["Latest Activity", formatDate(log.timestamp)],
+    ],
+    sectionX,
+    y,
+    sectionW
+  );
+
+  if (log.kind === "issue") {
+    y = drawSection(
+      doc,
+      "Issue Workflow",
+      [
+        ["Submitted", formatDate(log.details.submitted)],
+        ["Sent For Approval", formatDate(log.details.sentForApproval)],
+        ["Approved At", formatDate(log.details.approvedAt)],
+        ["Approved By", log.details.approvedBy || "-"],
+        ["Repairability", labelize(log.details.repairability || "unknown")],
+        ["Replacement Required", log.details.replacementRequired ? "Yes" : "No"],
+      ],
+      sectionX,
+      y,
+      sectionW
+    );
+
+    y = drawParagraphSection(
+      doc,
+      "Technical Assessment",
+      log.details.technicalAssessment || "Not provided",
+      sectionX,
+      y,
+      sectionW
+    );
+
+    y = drawParagraphSection(
+      doc,
+      "Approver Notes",
+      log.details.approverNotes || "Not provided",
+      sectionX,
+      y,
+      sectionW
+    );
+  } else {
+    y = drawSection(
+      doc,
+      "Return Workflow",
+      [
+        ["Requested", formatDate(log.details.requestedAt)],
+        ["Confirmed", formatDate(log.details.confirmedAt)],
+        ["Confirmed By", log.details.confirmedBy || "-"],
+        ["Employee", log.details.employeeEmail || "-"],
+        ["Serial Number", log.details.serialNumber || "-"],
+      ],
+      sectionX,
+      y,
+      sectionW
+    );
+
+    y = drawParagraphSection(
+      doc,
+      "Notes",
+      log.details.notes || "Not provided",
+      sectionX,
+      y,
+      sectionW
+    );
+  }
+
+  const safeTitle = (log.title || "activity-log")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 50);
+  doc.save(`${safeTitle || "activity-log"}.pdf`);
+}
+
+function drawSection(doc, title, rows, x, y, w) {
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(226, 232, 240);
+  const rowHeight = 6;
+  const headerHeight = 8;
+  const contentHeight = rows.length * rowHeight + 4;
+  const totalHeight = headerHeight + contentHeight;
+  doc.roundedRect(x, y, w, totalHeight, 2, 2, "FD");
+
+  doc.setFillColor(239, 246, 255);
+  doc.roundedRect(x + 0.2, y + 0.2, w - 0.4, headerHeight - 0.2, 2, 2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(title, x + 3, y + 5.5);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  let lineY = y + headerHeight + 4;
+  rows.forEach(([label, value]) => {
+    doc.setTextColor(75, 85, 99);
+    doc.text(`${label}:`, x + 3, lineY);
+    doc.setTextColor(17, 24, 39);
+    const wrapped = doc.splitTextToSize(String(value || "-"), w - 33);
+    doc.text(wrapped, x + 30, lineY);
+    lineY += Math.max(rowHeight, wrapped.length * 4.4);
+  });
+  doc.setTextColor(17, 24, 39);
+  return y + totalHeight + 6;
+}
+
+function drawParagraphSection(doc, title, text, x, y, w) {
+  const wrapped = doc.splitTextToSize(String(text || "-"), w - 6);
+  const headerHeight = 8;
+  const contentHeight = Math.max(10, wrapped.length * 4.4 + 4);
+  const totalHeight = headerHeight + contentHeight;
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(x, y, w, totalHeight, 2, 2, "FD");
+  doc.setFillColor(239, 246, 255);
+  doc.roundedRect(x + 0.2, y + 0.2, w - 0.4, headerHeight - 0.2, 2, 2, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(title, x + 3, y + 5.5);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(wrapped, x + 3, y + headerHeight + 4);
+
+  return y + totalHeight + 6;
+}
+
+async function svgToPngDataUrl(svgPath) {
+  try {
+    const response = await fetch(svgPath);
+    if (!response.ok) return null;
+    const svgText = await response.text();
+    const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(svgBlob);
+    const image = await loadImage(blobUrl);
+    URL.revokeObjectURL(blobUrl);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(image, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
 }
 
 function Badge({ children, tone = "zinc" }) {

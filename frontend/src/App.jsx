@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import MyAssets from "./MyAssets";
 import AssetIssueReportForm from "./AssetIssueReportForm";
 import AdminDashboard from "./AdminDashboard";
-import AdminLogin from "./AdminLogin";
 import AllReports from "./AllReports";
 import AllAssets from "./AllAssets";
 import OperationsHistory from "./OperationsHistory";
@@ -14,15 +13,37 @@ const FALLBACK_ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "rron.s@gjir
   .split(",")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 function isAllowedEmail(email = "") {
   return email.toLowerCase().endsWith("@gjirafa.com");
 }
 
+function normalizeBackendSession(payload) {
+  if (!payload?.user?.email) return null;
+  const user = payload.user;
+  return {
+    user: {
+      id: user.id || null,
+      email: user.email,
+      user_metadata: {
+        full_name:
+          [user.given_name, user.family_name].filter(Boolean).join(" ").trim() ||
+          user.name ||
+          user.email,
+      },
+    },
+  };
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("assets");
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [session, setSession] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminRole, setAdminRole] = useState(null);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
@@ -49,20 +70,7 @@ export default function App() {
       setActiveTab("assets");
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession ?? null);
-      if (nextSession?.user?.email) {
-        setAuthNotice("");
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    void refreshBackendSession();
   }, []);
 
   useEffect(() => {
@@ -78,21 +86,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    async function enforceAllowedDomain() {
-      if (!session?.user?.email) return;
-      if (isAllowedEmail(session.user.email)) return;
+    if (!session?.user?.email) return;
+    if (isAllowedEmail(session.user.email)) return;
 
-      setAuthNotice("Access denied. Only @gjirafa.com accounts are allowed.");
-      await supabase.auth.signOut();
-      setShowAdminLogin(false);
-      setActiveTab("assets");
-      setIsAdmin(false);
-      setAdminRole(null);
-      setSelectedAsset(null);
-      window.history.replaceState({}, "", "/");
-    }
-
-    enforceAllowedDomain();
+    setAuthNotice("Access denied. Only @gjirafa.com accounts are allowed.");
+    handleLogout();
   }, [session]);
 
   useEffect(() => {
@@ -134,26 +132,56 @@ export default function App() {
       setCheckingAdmin(false);
     }
 
-    checkAdminAccess();
+    void checkAdminAccess();
   }, [session]);
+
+  async function refreshBackendSession() {
+    setCheckingSession(true);
+    try {
+      const response = await fetch(apiUrl("/api/me"), {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        setSession(null);
+        setCheckingSession(false);
+        return;
+      }
+
+      const payload = await response.json();
+      const nextSession = normalizeBackendSession(payload);
+      setSession(nextSession);
+      if (nextSession?.user?.email) {
+        setAuthNotice("");
+      }
+    } catch {
+      setSession(null);
+    } finally {
+      setCheckingSession(false);
+    }
+  }
+
+  function startBackendLogin(returnTo = "/") {
+    const target = encodeURIComponent(returnTo);
+    window.location.href = apiUrl(`/api/auth/login?returnTo=${target}`);
+  }
 
   function openAssetsTab() {
     setActiveTab("assets");
-    setShowAdminLogin(false);
     setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/");
   }
 
   function openIssuesTab() {
     setActiveTab("issues");
-    setShowAdminLogin(false);
     setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=issues");
   }
 
   function openAdminTab() {
     if (!session) {
-      setShowAdminLogin(true);
+      startBackendLogin("/?view=admin");
       return;
     }
 
@@ -170,7 +198,7 @@ export default function App() {
 
   function openAllReportsTab() {
     if (!session) {
-      setShowAdminLogin(true);
+      startBackendLogin("/?view=all_reports");
       return;
     }
 
@@ -187,7 +215,7 @@ export default function App() {
 
   function openAllAssetsTab() {
     if (!session) {
-      setShowAdminLogin(true);
+      startBackendLogin("/?view=all_assets");
       return;
     }
 
@@ -204,7 +232,7 @@ export default function App() {
 
   function openHistoryTab() {
     if (!session) {
-      setShowAdminLogin(true);
+      startBackendLogin("/?view=history");
       return;
     }
 
@@ -219,28 +247,40 @@ export default function App() {
     window.history.replaceState({}, "", "/?view=history");
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
+  function handleLogout() {
     setActiveTab("assets");
     setIsAdmin(false);
     setAdminRole(null);
     setSelectedAsset(null);
-    setShowAdminLogin(false);
     setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/");
+    window.location.href = apiUrl("/logout");
   }
 
   function handleReportIssueFromAsset(asset) {
     setSelectedAsset(asset);
     setActiveTab("issues");
-    setShowAdminLogin(false);
     setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=issues");
   }
 
   function renderMainContent() {
+    if (checkingSession) {
+      return (
+        <div className="px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+            Checking session...
+          </div>
+        </div>
+      );
+    }
+
     if (!session) {
-      return <EmployeeLogin onAdminLogin={() => setShowAdminLogin(true)} externalNotice={authNotice} />;
+      return (
+        <EmployeeLogin
+          externalNotice={authNotice}
+        />
+      );
     }
 
     if (activeTab === "assets") {
@@ -252,114 +292,26 @@ export default function App() {
     }
 
     if (activeTab === "all_reports") {
-      if (checkingAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              Checking admin access...
-            </div>
-          </div>
-        );
-      }
-
-      if (!isAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              <h2 className="text-lg font-semibold">Access denied</h2>
-              <p className="mt-2 text-sm leading-7">
-                Your account is signed in, but it does not currently have permission to
-                access all reports.
-              </p>
-            </div>
-          </div>
-        );
-      }
-
+      if (checkingAdmin) return <StatusCard text="Checking admin access..." />;
+      if (!isAdmin) return <AccessDeniedCard text="access all reports." />;
       return <AllReports />;
     }
 
     if (activeTab === "all_assets") {
-      if (checkingAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              Checking admin access...
-            </div>
-          </div>
-        );
-      }
-
-      if (!isAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              <h2 className="text-lg font-semibold">Access denied</h2>
-              <p className="mt-2 text-sm leading-7">
-                Your account is signed in, but it does not currently have permission to
-                access all employee assets.
-              </p>
-            </div>
-          </div>
-        );
-      }
-
+      if (checkingAdmin) return <StatusCard text="Checking admin access..." />;
+      if (!isAdmin) return <AccessDeniedCard text="access all employee assets." />;
       return <AllAssets />;
     }
 
     if (activeTab === "history") {
-      if (checkingAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              Checking admin access...
-            </div>
-          </div>
-        );
-      }
-
-      if (!isAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              <h2 className="text-lg font-semibold">Access denied</h2>
-              <p className="mt-2 text-sm leading-7">
-                Your account is signed in, but it does not currently have permission to
-                access history.
-              </p>
-            </div>
-          </div>
-        );
-      }
-
+      if (checkingAdmin) return <StatusCard text="Checking admin access..." />;
+      if (!isAdmin) return <AccessDeniedCard text="access history." />;
       return <OperationsHistory />;
     }
 
     if (activeTab === "admin") {
-      if (checkingAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              Checking admin access...
-            </div>
-          </div>
-        );
-      }
-
-      if (!isAdmin) {
-        return (
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              <h2 className="text-lg font-semibold">Access denied</h2>
-              <p className="mt-2 text-sm leading-7">
-                Your account is signed in, but it does not currently have permission to
-                access the administrative dashboard.
-              </p>
-            </div>
-          </div>
-        );
-      }
-
+      if (checkingAdmin) return <StatusCard text="Checking admin access..." />;
+      if (!isAdmin) return <AccessDeniedCard text="access the administrative dashboard." />;
       return <AdminDashboard session={session} adminRole={adminRole} progressOnly />;
     }
 
@@ -372,7 +324,11 @@ export default function App() {
         <header className="sticky top-0 z-40 border-b border-white/60 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.04)] backdrop-blur-2xl">
           <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={openAssetsTab}
+                className="flex items-center gap-3 text-left sm:gap-4"
+              >
                 <img
                   src={gjirafaLogo}
                   alt="Gjirafa"
@@ -387,7 +343,7 @@ export default function App() {
                     Internal IT Operations
                   </p>
                 </div>
-              </div>
+              </button>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="w-full sm:w-auto" ref={adminMenuRef}>
@@ -412,7 +368,7 @@ export default function App() {
                             : "text-zinc-700 hover:bg-white/80"
                         }`}
                       >
-                        Issue Reports
+                        Report an issue
                       </button>
 
                       {isAdmin ? (
@@ -430,46 +386,13 @@ export default function App() {
 
                           {adminMenuOpen ? (
                             <div className="absolute left-0 top-[calc(100%+8px)] z-50 hidden w-52 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)] sm:block">
-                              <button
-                                onClick={openAllAssetsTab}
-                                className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                                  activeTab === "all_assets"
-                                    ? "bg-zinc-100 text-zinc-900"
-                                    : "text-zinc-700 hover:bg-zinc-50"
-                                }`}
-                              >
-                                All Assets
-                              </button>
-                              <button
-                                onClick={openAllReportsTab}
-                                className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                                  activeTab === "all_reports"
-                                    ? "bg-zinc-100 text-zinc-900"
-                                    : "text-zinc-700 hover:bg-zinc-50"
-                                }`}
-                              >
-                                All Reports
-                              </button>
-                              <button
-                                onClick={openAdminTab}
-                                className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                                  activeTab === "admin"
-                                    ? "bg-zinc-100 text-zinc-900"
-                                    : "text-zinc-700 hover:bg-zinc-50"
-                                }`}
-                              >
-                                Admin Dashboard
-                              </button>
-                              <button
-                                onClick={openHistoryTab}
-                                className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                                  activeTab === "history"
-                                    ? "bg-zinc-100 text-zinc-900"
-                                    : "text-zinc-700 hover:bg-zinc-50"
-                                }`}
-                              >
-                                History
-                              </button>
+                              <AdminMenuItems
+                                activeTab={activeTab}
+                                openAllAssetsTab={openAllAssetsTab}
+                                openAllReportsTab={openAllReportsTab}
+                                openAdminTab={openAdminTab}
+                                openHistoryTab={openHistoryTab}
+                              />
                             </div>
                           ) : null}
                         </div>
@@ -479,46 +402,13 @@ export default function App() {
 
                   {isAdmin && adminMenuOpen ? (
                     <div className="mt-2 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-[0_10px_24px_rgba(0,0,0,0.08)] sm:hidden">
-                      <button
-                        onClick={openAllAssetsTab}
-                        className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                          activeTab === "all_assets"
-                            ? "bg-zinc-100 text-zinc-900"
-                            : "text-zinc-700 hover:bg-zinc-50"
-                        }`}
-                      >
-                        All Assets
-                      </button>
-                      <button
-                        onClick={openAllReportsTab}
-                        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                          activeTab === "all_reports"
-                            ? "bg-zinc-100 text-zinc-900"
-                            : "text-zinc-700 hover:bg-zinc-50"
-                        }`}
-                      >
-                        All Reports
-                      </button>
-                      <button
-                        onClick={openAdminTab}
-                        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                          activeTab === "admin"
-                            ? "bg-zinc-100 text-zinc-900"
-                            : "text-zinc-700 hover:bg-zinc-50"
-                        }`}
-                      >
-                        Admin Dashboard
-                      </button>
-                      <button
-                        onClick={openHistoryTab}
-                        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                          activeTab === "history"
-                            ? "bg-zinc-100 text-zinc-900"
-                            : "text-zinc-700 hover:bg-zinc-50"
-                        }`}
-                      >
-                        History
-                      </button>
+                      <AdminMenuItems
+                        activeTab={activeTab}
+                        openAllAssetsTab={openAllAssetsTab}
+                        openAllReportsTab={openAllReportsTab}
+                        openAdminTab={openAdminTab}
+                        openHistoryTab={openHistoryTab}
+                      />
                     </div>
                   ) : null}
                 </div>
@@ -527,9 +417,7 @@ export default function App() {
                   <div className="hidden max-w-[320px] truncate rounded-[16px] border border-zinc-200/80 bg-white/90 px-4 py-2.5 text-sm text-zinc-600 shadow-[0_6px_18px_rgba(0,0,0,0.04)] sm:block">
                     <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" />{" "}
                     Signed in as{" "}
-                    <span className="font-medium text-zinc-900">
-                      {session.user.email}
-                    </span>
+                    <span className="font-medium text-zinc-900">{session.user.email}</span>
                     {adminRole ? (
                       <>
                         {" "}
@@ -552,17 +440,76 @@ export default function App() {
       ) : null}
 
       <main>{renderMainContent()}</main>
+    </div>
+  );
+}
 
-      {showAdminLogin ? (
-        <AdminLogin
-          onClose={() => setShowAdminLogin(false)}
-          onSuccess={() => {
-            setShowAdminLogin(false);
-            setActiveTab("admin");
-            window.history.replaceState({}, "", "/?view=admin");
-          }}
-        />
-      ) : null}
+function AdminMenuItems({
+  activeTab,
+  openAllAssetsTab,
+  openAllReportsTab,
+  openAdminTab,
+  openHistoryTab,
+}) {
+  return (
+    <>
+      <button
+        onClick={openAllAssetsTab}
+        className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+          activeTab === "all_assets" ? "bg-zinc-100 text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+      >
+        All Assets
+      </button>
+      <button
+        onClick={openAllReportsTab}
+        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+          activeTab === "all_reports"
+            ? "bg-zinc-100 text-zinc-900"
+            : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+      >
+        All Reports
+      </button>
+      <button
+        onClick={openAdminTab}
+        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+          activeTab === "admin" ? "bg-zinc-100 text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+      >
+        Admin Dashboard
+      </button>
+      <button
+        onClick={openHistoryTab}
+        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+          activeTab === "history" ? "bg-zinc-100 text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+      >
+        History
+      </button>
+    </>
+  );
+}
+
+function StatusCard({ text }) {
+  return (
+    <div className="px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl rounded-[32px] border border-zinc-200/80 bg-white px-6 py-6 text-zinc-700 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function AccessDeniedCard({ text }) {
+  return (
+    <div className="px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl rounded-[32px] border border-red-200 bg-red-50 px-6 py-6 text-red-800 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+        <h2 className="text-lg font-semibold">Access denied</h2>
+        <p className="mt-2 text-sm leading-7">
+          Your account is signed in, but it does not currently have permission to {text}
+        </p>
+      </div>
     </div>
   );
 }

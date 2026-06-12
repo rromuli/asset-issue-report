@@ -337,7 +337,7 @@ export default function OnboardingChecklist({ session, isAdmin, adminRole }) {
                         value={item.item_description}
                         onChange={(e) => updateItem(idx, "item_description", e.target.value)}
                         placeholder={
-                          item.item_type === "asset" ? "e.g. MacBook Pro 14" (2024)"
+                          item.item_type === "asset" ? "e.g. MacBook Pro 14-inch (2024)"
                           : item.item_type === "software" ? "e.g. Slack, Jira"
                           : item.item_type === "access" ? "e.g. Google Workspace, GitHub"
                           : "Description"

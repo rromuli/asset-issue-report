@@ -502,16 +502,18 @@ export default function App() {
                         My Reports
                       </button>
 
-                      <button
-                        onClick={openOnboardingTab}
-                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                          activeTab === "onboarding"
-                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
-                            : "text-zinc-700 hover:bg-white/80"
-                        }`}
-                      >
-                        Onboarding
-                      </button>
+                      {!isAdmin ? (
+                        <button
+                          onClick={openOnboardingTab}
+                          className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                            activeTab === "onboarding"
+                              ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                              : "text-zinc-700 hover:bg-white/80"
+                          }`}
+                        >
+                          Onboarding
+                        </button>
+                      ) : null}
 
                       {isAdmin ? (
                         <div className="relative">

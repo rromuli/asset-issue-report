@@ -25,6 +25,7 @@ const APPROVAL_STYLES = {
 
 export default function AdminDashboard({ session, adminRole, progressOnly = false }) {
   const [reports, setReports] = useState([]);
+  const [inventoryAssets, setInventoryAssets] = useState([]);
   const [returnRequests, setReturnRequests] = useState([]);
   const [attachmentCounts, setAttachmentCounts] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
@@ -42,9 +43,28 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
   const [procurementQuery, setProcurementQuery] = useState("");
   const [confirmAction, setConfirmAction] = useState(null);
   const [toast, setToast] = useState(null);
+  const [assigningInventoryId, setAssigningInventoryId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [slaChecking, setSlaChecking] = useState(false);
+
+  const PAGE_SIZE = 25;
 
   useEffect(() => {
     fetchReports();
+    fetchInventoryAssets();
+
+    const channel = supabase
+      .channel("admin-dashboard-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "asset_issue_reports" },
+        () => { fetchReports(); }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -103,6 +123,103 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
       setReturnRequests(returnRows || []);
     }
     setLoading(false);
+  }
+
+  async function checkSlaAlerts() {
+    setSlaChecking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("check-sla-alerts");
+      if (error) throw error;
+      if (data?.notified > 0) {
+        setToast(`SLA alert sent — ${data.notified} overdue report${data.notified > 1 ? "s" : ""} notified.`);
+      } else {
+        setToast("No overdue reports found — all within SLA.");
+      }
+    } catch (err) {
+      setToast("SLA check failed: " + (err?.message || "Unknown error"));
+    }
+    setSlaChecking(false);
+  }
+
+  async function fetchInventoryAssets() {
+    const { data, error } = await supabase
+      .from("inventory_assets")
+      .select(
+        "id, asset_name, asset_type, serial_number, asset_tag, make_model, condition_notes, status, assigned_report_id, assigned_employee_name, assigned_employee_identifier, assigned_at, created_at"
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("inventory_assets load error:", error.message);
+      setInventoryAssets([]);
+      return;
+    }
+
+    setInventoryAssets(data || []);
+  }
+
+  async function assignInventoryAssetToReport(inventoryAsset) {
+    if (!selectedReport || adminRole !== "it") return;
+
+    if ((inventoryAsset.status || "available") !== "available") {
+      showToast("Only available inventory assets can be assigned.", "warning");
+      return;
+    }
+
+    setAssigningInventoryId(inventoryAsset.id);
+
+    const assignedAtIso = new Date().toISOString();
+    const assignPayload = {
+      status: "assigned",
+      assigned_report_id: selectedReport.id,
+      assigned_employee_name: selectedReport.full_name || null,
+      assigned_employee_identifier: selectedReport.employee_id || null,
+      assigned_at: assignedAtIso,
+    };
+
+    const { error: inventoryUpdateError } = await supabase
+      .from("inventory_assets")
+      .update(assignPayload)
+      .eq("id", inventoryAsset.id);
+
+    if (inventoryUpdateError) {
+      showToast("Could not assign inventory asset: " + inventoryUpdateError.message, "error");
+      setAssigningInventoryId(null);
+      return;
+    }
+
+    const assignmentNote = `Assigned replacement inventory asset #${inventoryAsset.id} (${inventoryAsset.asset_name || "-"}, ${inventoryAsset.asset_type || "-"}, SN: ${inventoryAsset.serial_number || "-"}) on ${new Date(assignedAtIso).toLocaleString()} by ${session?.user?.email || "IT"}.`;
+    const nextApproverNotes = [selectedReport.approver_notes, assignmentNote]
+      .filter(Boolean)
+      .join("\n");
+
+    const reportPatch = {
+      status: "resolved",
+      approver_notes: nextApproverNotes,
+    };
+
+    const { error: reportUpdateError } = await supabase
+      .from("asset_issue_reports")
+      .update(reportPatch)
+      .eq("id", selectedReport.id);
+
+    if (reportUpdateError) {
+      showToast(
+        "Asset assigned, but report status update failed: " + reportUpdateError.message,
+        "warning"
+      );
+    } else {
+      syncUpdatedReport(reportPatch, selectedReport.id);
+    }
+
+    setInventoryAssets((current) =>
+      current.map((asset) =>
+        asset.id === inventoryAsset.id ? { ...asset, ...assignPayload } : asset
+      )
+    );
+
+    setAssigningInventoryId(null);
+    showToast("Replacement asset assigned from inventory.", "success");
   }
 
   function showToast(message, tone = "info") {
@@ -337,6 +454,10 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
       await submitApprovalDecision("rejected");
     }
 
+    if (confirmAction.type === "assign_inventory") {
+      await assignInventoryAssetToReport(confirmAction.asset);
+    }
+
     closeConfirmation();
   }
 
@@ -407,6 +528,17 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     adminRole,
   ]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, severityFilter, approvalFilter, quickFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
+
+  const paginatedReports = useMemo(
+    () => filteredReports.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredReports, currentPage]
+  );
+
   const metrics = useMemo(() => {
     const total = roleScopedReports.length;
     const submitted = roleScopedReports.filter(
@@ -416,9 +548,16 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
     const pendingApproval = roleScopedReports.filter(
       (r) => (r.approval_status || "not_requested") === "pending"
     ).length;
+    const resolved = roleScopedReports.filter((r) => r.status === "resolved").length;
 
-    return { total, submitted, inProgress, pendingApproval };
+    return { total, submitted, inProgress, pendingApproval, resolved };
   }, [roleScopedReports]);
+
+  const availableInventoryAssets = useMemo(
+    () =>
+      inventoryAssets.filter((asset) => (asset.status || "available") === "available"),
+    [inventoryAssets]
+  );
 
   if (loading) {
     return (
@@ -581,11 +720,12 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
           </div>
         </section>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Visible reports" value={metrics.total} tone="zinc" />
           <MetricCard label="New submissions" value={metrics.submitted} tone="amber" />
           <MetricCard label="In progress" value={metrics.inProgress} tone="blue" />
           <MetricCard label="Pending approval" value={metrics.pendingApproval} tone="violet" />
+          <MetricCard label="Resolved" value={metrics.resolved} tone="emerald" />
         </section>
 
         {adminRole === "hr" ? (
@@ -679,12 +819,23 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                   {filteredReports.length} visible report{filteredReports.length === 1 ? "" : "s"}
                 </p>
               </div>
-              <button
-                onClick={fetchReports}
-                className="w-full rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50 sm:w-auto"
-              >
-                Refresh
-              </button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                {adminRole === "it" ? (
+                  <button
+                    onClick={checkSlaAlerts}
+                    disabled={slaChecking}
+                    className="w-full rounded-2xl border border-violet-300 bg-violet-50 px-5 py-3 text-sm font-medium text-violet-700 transition hover:-translate-y-0.5 hover:bg-violet-100 disabled:opacity-60 sm:w-auto"
+                  >
+                    {slaChecking ? "Checking SLA…" : "Send SLA Alerts"}
+                  </button>
+                ) : null}
+                <button
+                  onClick={fetchReports}
+                  className="w-full rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50 sm:w-auto"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto border-b border-zinc-200/70 px-4 py-4 sm:px-6">
               <div className="flex min-w-max gap-2">
@@ -735,7 +886,7 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                       </td>
                     </tr>
                   ) : (
-                    filteredReports.map((report) => (
+                    paginatedReports.map((report) => (
                       <tr
                         key={report.id}
                         className={`border-t border-zinc-200/70 align-top transition hover:bg-white ${
@@ -757,9 +908,16 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                           </div>
                         </td>
                         <td className="px-4 py-3.5 sm:px-6 sm:py-4">
-                          <Badge className={SEVERITY_STYLES[report.severity] || SEVERITY_STYLES.Low}>
-                            {report.severity}
-                          </Badge>
+                          <div className="flex flex-col gap-1.5">
+                            <Badge className={SEVERITY_STYLES[report.severity] || SEVERITY_STYLES.Low}>
+                              {report.severity}
+                            </Badge>
+                            {isOverdue(report) ? (
+                              <Badge className="bg-red-100 text-red-700 ring-red-300">
+                                Overdue
+                              </Badge>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 sm:px-6 sm:py-4">
                           <div className="flex flex-col gap-2">
@@ -798,6 +956,30 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                 </tbody>
               </table>
             </div>
+
+            {totalPages > 1 ? (
+              <div className="flex items-center justify-between border-t border-zinc-200/70 px-4 py-4 sm:px-6">
+                <p className="text-sm text-zinc-500">
+                  Page {currentPage} of {totalPages} &mdash; {filteredReports.length} report{filteredReports.length === 1 ? "" : "s"}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -949,6 +1131,81 @@ export default function AdminDashboard({ session, adminRole, progressOnly = fals
                         >
                           Send for approval
                         </button>
+                      </div>
+
+                      <div className="rounded-[24px] border border-blue-200/80 bg-white p-4 shadow-[0_4px_12px_rgba(0,0,0,0.03)]">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">
+                              Inventory Assignment
+                            </p>
+                            <p className="mt-1 text-sm text-zinc-600">
+                              Assign an available replacement asset from central inventory.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={fetchInventoryAssets}
+                            className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50"
+                          >
+                            Refresh inventory
+                          </button>
+                        </div>
+
+                        {availableInventoryAssets.length === 0 ? (
+                          <div className="mt-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                            No available assets in inventory. Register assets in the Inventory tab first.
+                          </div>
+                        ) : (
+                          <div className="mt-3 overflow-x-auto rounded-2xl border border-zinc-200">
+                            <table className="min-w-[760px] w-full text-sm">
+                              <thead className="bg-zinc-50 text-left text-zinc-500">
+                                <tr>
+                                  <th className="px-4 py-3 font-semibold">Asset</th>
+                                  <th className="px-4 py-3 font-semibold">Type</th>
+                                  <th className="px-4 py-3 font-semibold">Serial</th>
+                                  <th className="px-4 py-3 font-semibold">Tag</th>
+                                  <th className="px-4 py-3 font-semibold">Model</th>
+                                  <th className="px-4 py-3 font-semibold">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {availableInventoryAssets.slice(0, 8).map((asset) => (
+                                  <tr key={asset.id} className="border-t border-zinc-200/70">
+                                    <td className="px-4 py-3 font-medium text-zinc-900">
+                                      {asset.asset_name || "-"}
+                                    </td>
+                                    <td className="px-4 py-3 text-zinc-700">{asset.asset_type || "-"}</td>
+                                    <td className="px-4 py-3 text-zinc-700">{asset.serial_number || "-"}</td>
+                                    <td className="px-4 py-3 text-zinc-700">{asset.asset_tag || "-"}</td>
+                                    <td className="px-4 py-3 text-zinc-700">{asset.make_model || "-"}</td>
+                                    <td className="px-4 py-3">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          askConfirmation({
+                                            type: "assign_inventory",
+                                            asset,
+                                            title: "Assign replacement asset?",
+                                            message: `This will assign "${asset.asset_name || "this asset"}" to the report and mark it as resolved.`,
+                                            confirmLabel: "Assign",
+                                            tone: "blue",
+                                          })
+                                        }
+                                        disabled={assigningInventoryId === asset.id}
+                                        className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                      >
+                                        {assigningInventoryId === asset.id
+                                          ? "Assigning..."
+                                          : "Assign to report"}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1136,6 +1393,7 @@ function MetricCard({ label, value, tone = "zinc" }) {
     blue: "bg-blue-100 text-blue-700",
     red: "bg-red-100 text-red-700",
     violet: "bg-violet-100 text-violet-700",
+    emerald: "bg-emerald-100 text-emerald-700",
   };
 
   return (
@@ -1286,4 +1544,12 @@ function formatDateTime(value) {
 
 function labelize(value) {
   return value.replaceAll("_", " ");
+}
+
+function isOverdue(report) {
+  if ((report.status || "submitted") === "resolved") return false;
+  const ageDays = (Date.now() - new Date(report.created_at).getTime()) / 86400000;
+  if (report.severity === "High") return ageDays > 2;
+  if (report.severity === "Medium") return ageDays > 5;
+  return false;
 }

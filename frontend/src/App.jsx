@@ -1,24 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import MyAssets from "./MyAssets";
+import MyReports from "./MyReports";
 import AssetIssueReportForm from "./AssetIssueReportForm";
 import AdminDashboard from "./AdminDashboard";
 import AllReports from "./AllReports";
 import AllAssets from "./AllAssets";
 import OperationsHistory from "./OperationsHistory";
+import AssetInventory from "./AssetInventory";
+import OnboardingChecklist from "./OnboardingChecklist";
 import EmployeeLogin from "./EmployeeLogin";
 import gjirafaLogo from "./assets/gjirafa-logo.svg";
 import { supabase } from "./supabaseClient";
+import { apiUrl, IS_BACKEND_CONFIGURED } from "./apiBaseUrl";
 
 const FALLBACK_ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "rron.s@gjirafa.com")
   .split(",")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-
-function apiUrl(path) {
-  return `${API_BASE_URL}${path}`;
-}
-
+const AUTH_MODE = (import.meta.env.VITE_AUTH_MODE || "auto").toLowerCase();
+const USE_BACKEND_AUTH =
+  AUTH_MODE === "backend" || (AUTH_MODE === "auto" && IS_BACKEND_CONFIGURED);
 function isAllowedEmail(email = "") {
   return email.toLowerCase().endsWith("@gjirafa.com");
 }
@@ -53,6 +54,17 @@ export default function App() {
   const adminMenuRef = useRef(null);
 
   useEffect(() => {
+    if (window.location.pathname === "/cb" && USE_BACKEND_AUTH) {
+      if (!IS_BACKEND_CONFIGURED) {
+        setAuthNotice(
+          "Authentication callback failed: backend URL is not configured. Set VITE_API_BASE_URL for this deployment."
+        );
+      } else {
+        window.location.replace(apiUrl(`/cb${window.location.search || ""}`));
+      }
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const requestedView = params.get("view");
 
@@ -64,13 +76,43 @@ export default function App() {
       setActiveTab("all_assets");
     } else if (requestedView === "all_reports") {
       setActiveTab("all_reports");
+    } else if (requestedView === "inventory") {
+      setActiveTab("inventory");
     } else if (requestedView === "issues") {
       setActiveTab("issues");
+    } else if (requestedView === "my_reports") {
+      setActiveTab("my_reports");
+    } else if (requestedView === "onboarding") {
+      setActiveTab("onboarding");
     } else {
       setActiveTab("assets");
     }
 
-    void refreshBackendSession();
+    if (USE_BACKEND_AUTH) {
+      void refreshBackendSession();
+      return;
+    }
+
+    let mounted = true;
+    setCheckingSession(true);
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data?.session || null);
+      setCheckingSession(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+      setSession(nextSession || null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -136,6 +178,11 @@ export default function App() {
   }, [session]);
 
   async function refreshBackendSession() {
+    if (!USE_BACKEND_AUTH) {
+      setCheckingSession(false);
+      return;
+    }
+
     setCheckingSession(true);
     try {
       const response = await fetch(apiUrl("/api/me"), {
@@ -163,6 +210,17 @@ export default function App() {
   }
 
   function startBackendLogin(returnTo = "/") {
+    if (!USE_BACKEND_AUTH) {
+      return;
+    }
+
+    if (!IS_BACKEND_CONFIGURED) {
+      setAuthNotice(
+        "Authentication is not configured for backend mode in this deployment. Set VITE_API_BASE_URL to your backend URL."
+      );
+      return;
+    }
+
     const target = encodeURIComponent(returnTo);
     window.location.href = apiUrl(`/api/auth/login?returnTo=${target}`);
   }
@@ -177,6 +235,12 @@ export default function App() {
     setActiveTab("issues");
     setAdminMenuOpen(false);
     window.history.replaceState({}, "", "/?view=issues");
+  }
+
+  function openMyReportsTab() {
+    setActiveTab("my_reports");
+    setAdminMenuOpen(false);
+    window.history.replaceState({}, "", "/?view=my_reports");
   }
 
   function openAdminTab() {
@@ -247,7 +311,42 @@ export default function App() {
     window.history.replaceState({}, "", "/?view=history");
   }
 
+  function openInventoryTab() {
+    if (!session) {
+      startBackendLogin("/?view=inventory");
+      return;
+    }
+
+    if (!isAdmin) {
+      setActiveTab("assets");
+      setAuthNotice("You are signed in, but your account does not have admin access.");
+      return;
+    }
+
+    setActiveTab("inventory");
+    setAdminMenuOpen(false);
+    window.history.replaceState({}, "", "/?view=inventory");
+  }
+
+  function openOnboardingTab() {
+    setActiveTab("onboarding");
+    setAdminMenuOpen(false);
+    window.history.replaceState({}, "", "/?view=onboarding");
+  }
+
   function handleLogout() {
+    if (!USE_BACKEND_AUTH) {
+      supabase.auth.signOut();
+      setSession(null);
+      setActiveTab("assets");
+      setIsAdmin(false);
+      setAdminRole(null);
+      setSelectedAsset(null);
+      setAdminMenuOpen(false);
+      window.history.replaceState({}, "", "/");
+      return;
+    }
+
     setActiveTab("assets");
     setIsAdmin(false);
     setAdminRole(null);
@@ -279,6 +378,7 @@ export default function App() {
       return (
         <EmployeeLogin
           externalNotice={authNotice}
+          useBackendAuth={USE_BACKEND_AUTH}
         />
       );
     }
@@ -289,6 +389,10 @@ export default function App() {
 
     if (activeTab === "issues") {
       return <AssetIssueReportForm selectedAsset={selectedAsset} session={session} />;
+    }
+
+    if (activeTab === "my_reports") {
+      return <MyReports session={session} />;
     }
 
     if (activeTab === "all_reports") {
@@ -307,6 +411,22 @@ export default function App() {
       if (checkingAdmin) return <StatusCard text="Checking admin access..." />;
       if (!isAdmin) return <AccessDeniedCard text="access history." />;
       return <OperationsHistory />;
+    }
+
+    if (activeTab === "inventory") {
+      if (checkingAdmin) return <StatusCard text="Checking admin access..." />;
+      if (!isAdmin) return <AccessDeniedCard text="access inventory." />;
+      return <AssetInventory adminRole={adminRole} />;
+    }
+
+    if (activeTab === "onboarding") {
+      return (
+        <OnboardingChecklist
+          session={session}
+          isAdmin={isAdmin}
+          adminRole={adminRole}
+        />
+      );
     }
 
     if (activeTab === "admin") {
@@ -337,7 +457,7 @@ export default function App() {
 
                 <div>
                   <h1 className="text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
-                    Asset Managmet System
+                    Asset Management System
                   </h1>
                   <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
                     Internal IT Operations
@@ -371,12 +491,34 @@ export default function App() {
                         Report an issue
                       </button>
 
+                      <button
+                        onClick={openMyReportsTab}
+                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                          activeTab === "my_reports"
+                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                            : "text-zinc-700 hover:bg-white/80"
+                        }`}
+                      >
+                        My Reports
+                      </button>
+
+                      <button
+                        onClick={openOnboardingTab}
+                        className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
+                          activeTab === "onboarding"
+                            ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
+                            : "text-zinc-700 hover:bg-white/80"
+                        }`}
+                      >
+                        Onboarding
+                      </button>
+
                       {isAdmin ? (
                         <div className="relative">
                           <button
                             onClick={() => setAdminMenuOpen((open) => !open)}
                             className={`rounded-2xl px-5 py-3 text-sm font-medium transition ${
-                              ["all_assets", "all_reports", "admin", "history"].includes(activeTab)
+                              ["all_assets", "all_reports", "admin", "history", "inventory", "onboarding"].includes(activeTab)
                                 ? "bg-white text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.08)]"
                                 : "text-zinc-700 hover:bg-white/80"
                             }`}
@@ -392,6 +534,8 @@ export default function App() {
                                 openAllReportsTab={openAllReportsTab}
                                 openAdminTab={openAdminTab}
                                 openHistoryTab={openHistoryTab}
+                                openInventoryTab={openInventoryTab}
+                                openOnboardingTab={openOnboardingTab}
                               />
                             </div>
                           ) : null}
@@ -408,6 +552,8 @@ export default function App() {
                         openAllReportsTab={openAllReportsTab}
                         openAdminTab={openAdminTab}
                         openHistoryTab={openHistoryTab}
+                        openInventoryTab={openInventoryTab}
+                        openOnboardingTab={openOnboardingTab}
                       />
                     </div>
                   ) : null}
@@ -450,6 +596,8 @@ function AdminMenuItems({
   openAllReportsTab,
   openAdminTab,
   openHistoryTab,
+  openInventoryTab,
+  openOnboardingTab,
 }) {
   return (
     <>
@@ -480,12 +628,28 @@ function AdminMenuItems({
         Admin Dashboard
       </button>
       <button
+        onClick={openInventoryTab}
+        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+          activeTab === "inventory" ? "bg-zinc-100 text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+      >
+        Inventory
+      </button>
+      <button
         onClick={openHistoryTab}
         className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
           activeTab === "history" ? "bg-zinc-100 text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
         }`}
       >
         History
+      </button>
+      <button
+        onClick={openOnboardingTab}
+        className={`mt-1 block w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
+          activeTab === "onboarding" ? "bg-zinc-100 text-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+      >
+        Onboarding
       </button>
     </>
   );

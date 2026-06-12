@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 
+const PAGE_SIZE = 50;
+
 const STATUS_STYLES = {
   submitted: "bg-amber-50 text-amber-700 ring-amber-200",
   in_progress: "bg-blue-50 text-blue-700 ring-blue-200",
@@ -25,10 +27,15 @@ export default function AllReports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchReports();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   async function fetchReports() {
     setLoading(true);
@@ -53,7 +60,6 @@ export default function AllReports() {
 
   const filteredReports = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-
     if (!term) return reports;
 
     return reports.filter((report) => {
@@ -65,6 +71,34 @@ export default function AllReports() {
       );
     });
   }, [reports, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
+
+  const paginatedReports = useMemo(
+    () => filteredReports.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredReports, currentPage]
+  );
+
+  function exportCsv() {
+    if (!filteredReports.length) return;
+    const headers = ["id", "full_name", "department", "asset_type", "issue_category", "severity", "status", "approval_status", "created_at"];
+    const rows = filteredReports.map((r) =>
+      headers.map((h) => {
+        const val = String(r[h] ?? "");
+        return val.includes(",") || val.includes('"') || val.includes("\n")
+          ? `"${val.replaceAll('"', '""')}"`
+          : val;
+      }).join(",")
+    );
+    const csv = "﻿" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (loading) {
     return (
@@ -104,12 +138,22 @@ export default function AllReports() {
                 Complete list of submitted reports across all statuses.
               </p>
             </div>
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search name, department, asset..."
-              className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:w-72"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search name, department, asset..."
+                className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:w-72"
+              />
+              <button
+                type="button"
+                onClick={exportCsv}
+                disabled={filteredReports.length === 0}
+                className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
         </section>
 
@@ -128,14 +172,14 @@ export default function AllReports() {
                 </tr>
               </thead>
               <tbody>
-                {filteredReports.length === 0 ? (
+                {paginatedReports.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-zinc-500">
                       No reports found.
                     </td>
                   </tr>
                 ) : (
-                  filteredReports.map((report) => (
+                  paginatedReports.map((report) => (
                     <tr key={report.id} className="border-t border-zinc-200/70">
                       <td className="px-5 py-3 font-medium text-zinc-900">{report.full_name}</td>
                       <td className="px-5 py-3 text-zinc-700">{report.department || "-"}</td>
@@ -176,6 +220,30 @@ export default function AllReports() {
               </tbody>
             </table>
           </div>
+
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between border-t border-zinc-200/70 px-5 py-4">
+              <p className="text-sm text-zinc-500">
+                Page {currentPage} of {totalPages} &mdash; {filteredReports.length} report{filteredReports.length === 1 ? "" : "s"}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

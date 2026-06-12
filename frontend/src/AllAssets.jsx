@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 
+const PAGE_SIZE = 50;
+
 export default function AllAssets() {
   const [assets, setAssets] = useState([]);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState({});
@@ -13,6 +15,7 @@ export default function AllAssets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanTimerRef = useRef(null);
@@ -248,6 +251,10 @@ export default function AllAssets() {
     };
   }, [scannerOpen]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   const filteredAssets = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return assets;
@@ -264,6 +271,34 @@ export default function AllAssets() {
       );
     });
   }, [assets, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAssets.length / PAGE_SIZE));
+
+  const paginatedAssets = useMemo(
+    () => filteredAssets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredAssets, currentPage]
+  );
+
+  function exportCsv() {
+    if (!filteredAssets.length) return;
+    const headers = ["id", "employee_name", "employee_email", "asset_name", "asset_type", "serial_number", "asset_tag", "make_model", "assigned_at"];
+    const rows = filteredAssets.map((a) =>
+      headers.map((h) => {
+        const val = String(a[h] ?? "");
+        return val.includes(",") || val.includes('"') || val.includes("\n")
+          ? `"${val.replaceAll('"', '""')}"`
+          : val;
+      }).join(",")
+    );
+    const csv = "﻿" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `assets-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (loading) {
     return (
@@ -303,12 +338,22 @@ export default function AllAssets() {
                 Full inventory submitted by employees.
               </p>
             </div>
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search employee, asset, serial, tag..."
-              className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:w-80"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search employee, asset, serial, tag..."
+                className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:w-80"
+              />
+              <button
+                type="button"
+                onClick={exportCsv}
+                disabled={filteredAssets.length === 0}
+                className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
           <div className="mt-3">
             <button
@@ -349,7 +394,7 @@ export default function AllAssets() {
                     </td>
                   </tr>
                 ) : (
-                  filteredAssets.map((asset) => (
+                  paginatedAssets.map((asset) => (
                     <tr key={asset.id} className="border-t border-zinc-200/70">
                       <td className="px-5 py-3">
                         <div className="font-medium text-zinc-900">
@@ -398,6 +443,29 @@ export default function AllAssets() {
                 )}
               </tbody>
             </table>
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between border-t border-zinc-200/70 px-5 py-4">
+              <p className="text-sm text-zinc-500">
+                Page {currentPage} of {totalPages} &mdash; {filteredAssets.length} asset{filteredAssets.length === 1 ? "" : "s"}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
           </div>
         </section>
       </div>

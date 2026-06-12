@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
 export default function AssetIssueReportForm({ selectedAsset = null, session = null }) {
   const sessionFullName =
     session?.user?.user_metadata?.full_name ||
@@ -141,6 +143,16 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
 
     if (!validate()) return;
 
+    const oversizedFile = (form.attachments || []).find(
+      (f) => f.size > MAX_ATTACHMENT_BYTES
+    );
+    if (oversizedFile) {
+      setSubmitError(
+        `"${oversizedFile.name}" exceeds the 10 MB limit. Please use a smaller file.`
+      );
+      return;
+    }
+
     try {
       setSubmitting(true);
       setSubmitted(false);
@@ -183,35 +195,38 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
         return;
       }
 
-      for (const file of form.attachments || []) {
-        const uniqueFileName = `${Date.now()}-${file.name}`;
-        const filePath = `${report.id}/${uniqueFileName}`;
+      const uploadResults = await Promise.all(
+        (form.attachments || []).map(async (file) => {
+          const uniqueFileName = `${Date.now()}-${file.name}`;
+          const filePath = `${report.id}/${uniqueFileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from("attachments")
-          .upload(filePath, file);
+          const { error: uploadError } = await supabase.storage
+            .from("attachments")
+            .upload(filePath, file);
 
-        if (uploadError) {
-          setSubmitError("File upload error: " + uploadError.message);
-          return;
-        }
+          if (uploadError) return { error: "File upload error: " + uploadError.message };
 
-        const { error: attachmentError } = await supabase
-          .from("asset_issue_attachments")
-          .insert([
-            {
-              report_id: report.id,
-              file_name: file.name,
-              file_path: filePath,
-              file_size: file.size,
-              mime_type: file.type,
-            },
-          ]);
+          const { error: attachmentError } = await supabase
+            .from("asset_issue_attachments")
+            .insert([
+              {
+                report_id: report.id,
+                file_name: file.name,
+                file_path: filePath,
+                file_size: file.size,
+                mime_type: file.type,
+              },
+            ]);
 
-        if (attachmentError) {
-          setSubmitError("Attachment row error: " + attachmentError.message);
-          return;
-        }
+          if (attachmentError) return { error: "Attachment row error: " + attachmentError.message };
+          return { ok: true };
+        })
+      );
+
+      const firstUploadError = uploadResults.find((r) => r.error);
+      if (firstUploadError) {
+        setSubmitError(firstUploadError.error);
+        return;
       }
 
       const { error: emailError } = await supabase.functions.invoke(
@@ -382,7 +397,7 @@ export default function AssetIssueReportForm({ selectedAsset = null, session = n
                 <Input
                   value={form.assetTag}
                   onChange={(value) => updateField("assetTag", value)}
-                  placeholder="e.g. IT-LAP-0042"
+                  placeholder="e.g. IT-GJIR-042"
                   error={errors.assetTag}
                 />
               </Field>

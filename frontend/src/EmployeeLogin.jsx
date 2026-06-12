@@ -1,32 +1,36 @@
 import { useState } from "react";
 import gjirafaLogo from "./assets/gjirafa-logo.svg";
+import { supabase } from "./supabaseClient";
 
-const OIDC_BUTTON_LABEL = "Continue with Company Login";
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-
-function apiUrl(path) {
-  return `${API_BASE_URL}${path}`;
-}
-
-export default function EmployeeLogin({ externalNotice = "" }) {
+export default function EmployeeLogin({
+  externalNotice = "",
+  useBackendAuth = false,
+}) {
   const [notice, setNotice] = useState(null);
-  const [adminPopupOpen, setAdminPopupOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
-    try {
-      const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-      window.location.href = apiUrl(`/api/auth/login?returnTo=${returnTo}`);
-    } catch (error) {
+  async function handlePasswordLogin(event) {
+    event.preventDefault();
+    setNotice(null);
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) {
       setNotice({
         tone: "error",
-        message: "Company sign-in failed: " + error.message,
+        message: "Sign-in failed: " + error.message,
       });
+      setLoading(false);
+      return;
     }
-  }
 
-  function handleAdminLogin() {
-    const returnTo = encodeURIComponent("/?view=admin");
-    window.location.href = apiUrl(`/api/auth/login?returnTo=${returnTo}`);
+    setLoading(false);
   }
 
   return (
@@ -47,22 +51,56 @@ export default function EmployeeLogin({ externalNotice = "" }) {
           Employee Login
         </h1>
         <p className="mt-2 text-sm text-zinc-600">
-          Sign in to continue.
+          {useBackendAuth
+            ? "Sign in with your company account to continue."
+            : "Sign in with your Supabase account to continue."}
         </p>
+        {useBackendAuth ? (
+          <div className="mt-6 space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/api/auth/login?returnTo=%2F";
+              }}
+              className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)] transition hover:-translate-y-0.5 hover:from-blue-700 hover:to-blue-800"
+            >
+              Continue with Company Login
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handlePasswordLogin} className="mt-6 space-y-3">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-900">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="w-full rounded-2xl border border-zinc-300 bg-zinc-50/40 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                placeholder="name@gjirafa.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-900">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-2xl border border-zinc-300 bg-zinc-50/40 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                placeholder="Enter password"
+                required
+              />
+            </div>
 
-        <button
-          onClick={handleLogin}
-          className="mt-7 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)] transition hover:-translate-y-0.5 hover:from-blue-700 hover:to-blue-800"
-        >
-          {OIDC_BUTTON_LABEL}
-        </button>
-
-        <button
-          onClick={() => setAdminPopupOpen(true)}
-          className="mt-3 w-full rounded-2xl border border-zinc-300 bg-white px-5 py-3.5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-zinc-50"
-        >
-          Admin Login
-        </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)] transition hover:-translate-y-0.5 hover:from-blue-700 hover:to-blue-800 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+        )}
 
         {notice ? (
           <div
@@ -83,33 +121,6 @@ export default function EmployeeLogin({ externalNotice = "" }) {
         ) : null}
       </div>
 
-      {adminPopupOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[28px] border border-zinc-200/80 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.25)] sm:p-7">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">
-              Administrator Login
-            </p>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900">Admin Access</h2>
-            <p className="mt-2 text-sm text-zinc-600">
-              Continue with company sign-in to open the admin dashboard.
-            </p>
-
-            <button
-              onClick={handleAdminLogin}
-              className="mt-6 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)] transition hover:-translate-y-0.5 hover:from-blue-700 hover:to-blue-800"
-            >
-              Continue as Admin
-            </button>
-
-            <button
-              onClick={() => setAdminPopupOpen(false)}
-              className="mt-2 w-full rounded-2xl border border-zinc-300 bg-white px-5 py-3.5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-zinc-50"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
